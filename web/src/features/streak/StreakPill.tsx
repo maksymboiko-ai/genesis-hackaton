@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Mascot } from '@/components/Mascot'
-import { loadPlans } from '@/features/product/data'
+import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { daysLabel, streakOf } from '@/lib/streak'
 import { StreakDetails } from './StreakDetails'
@@ -15,7 +15,7 @@ export function StreakPill() {
   const { childId } = useSession()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const load = useCallback(() => loadPlans(childId!).then((plans) => ({ plans, pathname })), [childId, pathname])
+  const load = useCallback(() => api.getStreak(childId!).then(({ days }) => ({ days, pathname })), [childId, pathname])
   const { data } = useResource(childId ? load : null)
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function StreakPill() {
   }, [open])
 
   if (!data) return null
-  const streak = streakOf(data.plans)
+  const streak = streakOf(data.days)
 
   return (
     <div ref={wrapRef} className="relative">

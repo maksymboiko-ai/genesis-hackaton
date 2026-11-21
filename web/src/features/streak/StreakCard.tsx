@@ -1,10 +1,9 @@
 import { Mascot } from '@/components/Mascot'
-import type { Curriculum } from '@/contracts/domain'
 import { daysLabel, streakOf } from '@/lib/streak'
 import { StreakWeek } from './StreakWeek'
 
-export function StreakCard({ plans }: { plans: Curriculum[] }) {
-  const streak = streakOf(plans)
+export function StreakCard({ days }: { days: string[] }) {
+  const streak = streakOf(days)
 
   const title =
     streak.state === 'none'

@@ -9,8 +9,8 @@ import { nextLesson, pickUpNext } from '@/features/product/data'
 import { daysLabel, seenToday, streakOf } from '@/lib/streak'
 import { StreakWeek } from './StreakWeek'
 
-export function StreakNotice({ plans, childId }: { plans: Curriculum[]; childId: string }) {
-  const streak = streakOf(plans)
+export function StreakNotice({ plans, days, childId }: { plans: Curriculum[]; days: string[]; childId: string }) {
+  const streak = streakOf(days)
   const kind = streak.state === 'frozen' ? 'freeze' : streak.state === 'none' && streak.last > 0 ? 'restart' : null
   const [open, setOpen] = useState(() => kind !== null && !seenToday(kind, childId))
 

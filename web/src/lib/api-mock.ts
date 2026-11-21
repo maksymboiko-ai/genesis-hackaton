@@ -598,6 +598,18 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
           .map((row) => omit(row, 'childId')),
       }
     }
+    case 'GET children/:id/streak': {
+      const child = find(db.children, itemId, 'Child')
+      const plans = new Set(db.curricula.filter((plan) => plan.childId === child.id).map((plan) => plan.id))
+      const pad = (value: number) => String(value).padStart(2, '0')
+      const days = new Set(
+        db.attempts
+          .filter((attempt) => plans.has(attempt.curriculumId))
+          .map((attempt) => new Date(attempt.at))
+          .map((date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`),
+      )
+      return { days: [...days].sort().reverse() }
+    }
     case 'GET books':
       return { books: db.books.map((book) => omit(book, 'readyAt')) }
     case 'POST books/:id': {

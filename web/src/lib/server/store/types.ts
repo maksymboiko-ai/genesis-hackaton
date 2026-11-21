@@ -194,6 +194,12 @@ export interface Store {
   /** A child's latest attempts across their latest curricula, newest first. */
   listChildAttempts(childId: string, limit: number): Promise<AttemptRow[]>;
 
+  // --- streak ---
+  /** Marks a day (YYYY-MM-DD, the child's calendar) as active; repeats are no-ops. */
+  addActivityDay(childId: string, day: string): Promise<void>;
+  /** The child's active days, newest first, at most limit. */
+  listActivityDays(childId: string, limit: number): Promise<string[]>;
+
   // --- replan ---
   /** Moves the curriculum to 'running' if idle or stale. True for the claimer. */
   claimReplan(curriculumId: string, staleBeforeIso: string): Promise<boolean>;

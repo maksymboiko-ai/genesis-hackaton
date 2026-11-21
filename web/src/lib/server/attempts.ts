@@ -8,6 +8,7 @@ import { gradeAttempt, nextMastery, skillScores } from "./grading";
 import { readContent } from "./lessons";
 import { maybeStartReplan, startLearnerNotesRefresh } from "./replan";
 import { getStore } from "./store";
+import { recordActivity } from "./streak";
 
 /**
  * POST /lessons/:id/attempts. Grades in code, stores the attempt, completes
@@ -17,6 +18,7 @@ export async function submitAttempt(
   user: AuthUser,
   lessonId: string,
   body: SubmitAttemptRequest,
+  timeZone = "UTC",
 ): Promise<SubmitAttemptResponse> {
   const store = getStore();
   const { lesson, curriculum, child } = await ownedLesson(user, lessonId);
@@ -40,6 +42,8 @@ export async function submitAttempt(
     subject: curriculum.subject,
     mastery,
   });
+  // Any finished quiz counts the day toward the streak, retakes included.
+  await recordActivity(curriculum.childId, timeZone);
 
   const lessons = await store.listLessons(curriculum.id);
   const next = lessons.find((l) => !l.completedAt);

@@ -184,12 +184,14 @@ function PlanTile({ plan, fresh }: { plan: Curriculum; fresh: boolean }) {
 function LessonsTab({
   child,
   plans,
+  days,
   building,
   freshId,
   onNewPlan,
 }: {
   child: Child
   plans: Curriculum[]
+  days: string[]
   building: string | null
   freshId: string | null
   onNewPlan: () => void
@@ -226,7 +228,7 @@ function LessonsTab({
 
   return (
     <div className="flex flex-col gap-[18px] md:gap-[26px]">
-      <StreakCard plans={plans} />
+      <StreakCard days={days} />
       <h1 className="q a-rise" style={{ fontSize: 'clamp(24px, 3.2vw, 34px)' }}>
         {upNext
           ? `Ready for ${nextLesson(upNext)?.estimatedMinutes ?? 10} minutes?`
@@ -350,6 +352,7 @@ function PlanRow({ plan, fresh }: { plan: Curriculum; fresh: boolean }) {
 function ParentsTab({
   child,
   plans,
+  days,
   building,
   freshId,
   onNewPlan,
@@ -357,6 +360,7 @@ function ParentsTab({
 }: {
   child: Child
   plans: Curriculum[]
+  days: string[]
   building: string | null
   freshId: string | null
   onNewPlan: () => void
@@ -364,7 +368,7 @@ function ParentsTab({
 }) {
   const changes = planChanges(plans)
   const average = averageScore(plans)
-  const streak = streakOf(plans)
+  const streak = streakOf(days)
 
   if (plans.length === 0 && !building) {
     return <FirstPlan name={child.name} gradeLevel={child.gradeLevel} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
@@ -432,6 +436,9 @@ export function HomePage() {
   const children = useResource(api.listChildren)
   const load = useCallback(() => loadPlans(childId!), [childId])
   const plans = useResource(childId ? load : null, isAdjusting)
+  const loadStreak = useCallback(() => api.getStreak(childId!), [childId])
+  const streak = useResource(childId ? loadStreak : null)
+  const days = streak.data?.days ?? []
 
   const child = children.data?.children.find((candidate) => candidate.id === childId)
   const childMissing = children.data !== null && !child
@@ -494,7 +501,8 @@ export function HomePage() {
   }
 
   const error = children.error ?? plans.error
-  const ready = child && plans.data
+  // A failed streak load shows no streak rather than blocking the page.
+  const ready = child && plans.data && (streak.data || streak.error)
 
   return (
     <div className="flex w-full flex-col gap-[18px] md:gap-[26px]">
@@ -517,13 +525,14 @@ export function HomePage() {
           <Skeleton tab={tab} />
         ) : (
           <div key={tab} className={tab === 'parents' ? 'a-step' : 'a-step-back'}>
-            <StreakNotice plans={plans.data!} childId={child.id} />
+            <StreakNotice plans={plans.data!} days={days} childId={child.id} />
             {tab === 'lessons' ? (
-              <LessonsTab child={child} plans={plans.data!} building={building} freshId={freshId} onNewPlan={openDialog} />
+              <LessonsTab child={child} plans={plans.data!} days={days} building={building} freshId={freshId} onNewPlan={openDialog} />
             ) : (
               <ParentsTab
                 child={child}
                 plans={plans.data!}
+                days={days}
                 building={building}
                 freshId={freshId}
                 onNewPlan={openDialog}

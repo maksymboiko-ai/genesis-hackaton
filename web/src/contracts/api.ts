@@ -139,6 +139,14 @@ export const CreateCurriculumResponse = z.discriminatedUnion("status", [
 ]);
 export type CreateCurriculumResponse = z.infer<typeof CreateCurriculumResponse>;
 
+// GET /children/:childId/streak
+// The days the child finished a quiz, newest first, as YYYY-MM-DD in the
+// child's calendar. The app derives the streak, freezes and week view.
+export const GetStreakResponse = z.object({
+  days: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+});
+export type GetStreakResponse = z.infer<typeof GetStreakResponse>;
+
 // GET /curricula?childId=...
 export const ListCurriculaResponse = z.object({
   curricula: z.array(Curriculum.omit({ lessons: true, replanEvents: true })),

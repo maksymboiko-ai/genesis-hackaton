@@ -422,6 +422,24 @@ export class SupabaseStore implements Store {
     check(error, "fail lesson");
   }
 
+  async addActivityDay(childId: string, day: string) {
+    const { error } = await this.db
+      .from("child_activity_day")
+      .upsert({ child_id: childId, day }, { onConflict: "child_id,day", ignoreDuplicates: true });
+    check(error, "add activity day");
+  }
+
+  async listActivityDays(childId: string, limit: number) {
+    const { data, error } = await this.db
+      .from("child_activity_day")
+      .select("day")
+      .eq("child_id", childId)
+      .order("day", { ascending: false })
+      .limit(limit);
+    check(error, "list activity days");
+    return (data as { day: string }[]).map((row) => row.day);
+  }
+
   async recordAttempt(input: {
     lessonId: string;
     score: number;
