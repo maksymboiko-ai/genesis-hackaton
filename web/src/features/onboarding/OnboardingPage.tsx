@@ -8,13 +8,17 @@ export function OnboardingPage({ cancellable = false }: { cancellable?: boolean 
   const router = useRouter()
   const { setChildId } = useSession()
 
-  return (
+  const quiz = (
     <ChildQuiz
-      onDone={(child) => {
+      embedded={cancellable}
+      onDone={(child, curriculumId) => {
         setChildId(child.id)
-        router.push('/app')
+        if (!curriculumId) router.push('/app')
+        else router.push(cancellable ? `/app/curricula/${curriculumId}` : `/paywall?plan=${curriculumId}`)
       }}
       onCancel={cancellable ? () => router.push('/app') : undefined}
     />
   )
+
+  return cancellable ? quiz : <main>{quiz}</main>
 }

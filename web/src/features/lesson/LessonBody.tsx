@@ -1,0 +1,141 @@
+import type { ReactNode } from 'react'
+import Markdown from 'react-markdown'
+import type { Components } from 'react-markdown'
+import type { SubjectKey } from '@/lib/subjects'
+import { splitLabel } from './text'
+import type { Section } from './text'
+
+type HastNode = { type: string; value?: string; tagName?: string; children?: HastNode[] }
+
+function textOf(node: HastNode | undefined): string {
+  if (!node) return ''
+  if (node.type === 'text') return node.value ?? ''
+  return (node.children ?? []).map(textOf).join('')
+}
+
+function soleCode(node: HastNode | undefined) {
+  const children = (node?.children ?? []).filter((child) => child.type !== 'text' || child.value?.trim())
+  return children.length === 1 && children[0].tagName === 'code' ? textOf(children[0]) : null
+}
+
+function components(subject: SubjectKey): Components {
+  return {
+    p: ({ node, children }) => {
+      const code = soleCode(node as HastNode)
+      return code ? <p className="eq solo">{code}</p> : <p>{children}</p>
+    },
+    ol: ({ children }) => <ol className="steps">{children}</ol>,
+    pre: ({ node }) => <p className="eq solo">{textOf(node as HastNode).trim()}</p>,
+    a: ({ children }) => <span>{children}</span>,
+    img: () => null,
+    hr: () => null,
+    blockquote: ({ node, children }) => {
+      if (subject !== 'read') return <div className="box bg-s-tint">{children}</div>
+      const lines = textOf(node as HastNode)
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+      return (
+        <div className="passage">
+          {lines.map((line, index) => (
+            <PassageLine key={index} number={index + 1}>
+              {line}
+            </PassageLine>
+          ))}
+        </div>
+      )
+    },
+  }
+}
+
+function PassageLine({ number, children }: { number: number; children: ReactNode }) {
+  return (
+    <>
+      <span className="ln" aria-hidden="true">
+        {number}
+      </span>
+      <span>{children}</span>
+    </>
+  )
+}
+
+export function LessonBody({
+  sections,
+  subject,
+  fontStep,
+}: {
+  sections: Section[]
+  subject: SubjectKey
+  fontStep: number
+}) {
+  const map = components(subject)
+  const md = (body: string) => <Markdown components={map}>{body}</Markdown>
+
+  return (
+    <div className={`ld fs-${fontStep}`}>
+      {sections.map((section) => {
+        const { title, label } = splitLabel(section.heading ?? '')
+
+        if (!section.heading) {
+          return (
+            <section key={section.id} id={section.id} className={section.kind === 'recap' ? 'remember' : undefined}>
+              {md(section.body)}
+            </section>
+          )
+        }
+
+        if (section.kind === 'rule') {
+          return (
+            <section key={section.id} id={section.id}>
+              <div className="box rule bg-s-tint">
+                <h2 className="lab text-s-ink">{section.heading}</h2>
+                {md(section.body)}
+              </div>
+            </section>
+          )
+        }
+
+        if (section.kind === 'slip') {
+          return (
+            <section key={section.id} id={section.id}>
+              <div className="box slip bg-sun-tint">
+                <h2 className="lab text-sun-ink">{section.heading}</h2>
+                {md(section.body)}
+              </div>
+            </section>
+          )
+        }
+
+        if (section.kind === 'recap') {
+          return (
+            <section key={section.id} id={section.id}>
+              <div className="box recap bg-surface-2">
+                <h2 className="lab text-muted">{section.heading}</h2>
+                {md(section.body)}
+              </div>
+            </section>
+          )
+        }
+
+        if (section.kind === 'example') {
+          return (
+            <section key={section.id} id={section.id}>
+              <h2>{title}</h2>
+              <div className="box plain">
+                {label && <p className="lab text-muted">{label}</p>}
+                {md(section.body)}
+              </div>
+            </section>
+          )
+        }
+
+        return (
+          <section key={section.id} id={section.id}>
+            <h2>{section.heading}</h2>
+            {md(section.body)}
+          </section>
+        )
+      })}
+    </div>
+  )
+}
