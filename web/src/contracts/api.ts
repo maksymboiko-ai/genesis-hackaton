@@ -5,11 +5,13 @@ import { z } from "zod";
 import {
   Book,
   Child,
+  Clarification,
   ContentStatus,
   Curriculum,
   Id,
   LearnerProfile,
   LessonSummary,
+  MAX_CLARIFYING_QUESTIONS,
   Question,
   QuestionResult,
   ReplanTrigger,
@@ -58,13 +60,26 @@ export const GetBookResponse = Book;
 // POST /curricula
 // Generates the outline before responding (expect several seconds), then
 // starts generating the first lesson in the background.
+//
+// If the prompt is too vague to plan, nothing is stored and the response is
+// "needs_clarification". Show the questions, then send the same request again
+// with the answers in clarifications; that call always creates the curriculum.
 export const CreateCurriculumRequest = z.object({
   childId: Id,
   prompt: z.string().min(1).max(2000),
   bookId: Id.nullable(),
+  // [] on the first call.
+  clarifications: z.array(Clarification).max(MAX_CLARIFYING_QUESTIONS),
 });
 export type CreateCurriculumRequest = z.infer<typeof CreateCurriculumRequest>;
-export const CreateCurriculumResponse = Curriculum;
+export const CreateCurriculumResponse = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("created"), curriculum: Curriculum }),
+  z.object({
+    status: z.literal("needs_clarification"),
+    questions: z.array(z.string()).min(1).max(MAX_CLARIFYING_QUESTIONS),
+  }),
+]);
+export type CreateCurriculumResponse = z.infer<typeof CreateCurriculumResponse>;
 
 // GET /curricula?childId=...
 export const ListCurriculaResponse = z.object({

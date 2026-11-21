@@ -14,6 +14,7 @@
 // length or range constraints. Check anything else in code after parsing.
 import { z } from "zod";
 import {
+  Clarification,
   LearnerProfile,
   LessonContent,
   ReplanDiagnosis,
@@ -56,6 +57,21 @@ export const OutlineOutput = z.object({
 });
 export type OutlineOutput = z.infer<typeof OutlineOutput>;
 
+// What the model returns for an outline request. Either questions is empty
+// and the rest is a full outline, or the goal is too vague to plan: then
+// questions holds what to ask and lessons is [].
+export const OutlineDraft = OutlineOutput.extend({
+  questions: z.array(z.string()),
+});
+export type OutlineDraft = z.infer<typeof OutlineDraft>;
+
+// What generateOutline returns. "questions" has 1 to
+// MAX_CLARIFYING_QUESTIONS entries and only happens when
+// GenerateOutlineInput.clarifications is empty, so there is one round at most.
+export type OutlineResult =
+  | { kind: "outline"; outline: OutlineOutput }
+  | { kind: "questions"; questions: string[] };
+
 export const GeneratedQuestion = z.object({
   prompt: z.string(),
   // Exactly CHOICES_PER_QUESTION entries.
@@ -96,6 +112,9 @@ export type LearnerNotesOutput = z.infer<typeof LearnerNotesOutput>;
 
 export type GenerateOutlineInput = {
   prompt: string;
+  // Answers to the questions an earlier call returned, or [] on the first
+  // call. When non-empty the result is always an outline.
+  clarifications: Clarification[];
   learner: LearnerProfile;
   // Skill slugs this child already has mastery rows for, to be reused.
   knownSkills: string[];
@@ -143,7 +162,7 @@ export interface AiService {
   generateOutline(
     input: GenerateOutlineInput,
     options?: AiCallOptions,
-  ): Promise<OutlineOutput>;
+  ): Promise<OutlineResult>;
 
   // Returns stored-form content: question ids assigned, slugs and choice
   // counts checked.
