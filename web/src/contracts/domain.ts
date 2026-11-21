@@ -41,6 +41,17 @@ export const EXCELLING_FROM = 0.9;
 export const MASTERY_ALPHA = 0.3;
 export const MASTERY_START = 0.5;
 
+// When a goal is too vague to plan, the app asks at most this many questions,
+// once, before building the curriculum.
+export const MAX_CLARIFYING_QUESTIONS = 3;
+
+// A clarifying question the app asked and the answer it got.
+export const Clarification = z.object({
+  question: z.string().min(1),
+  answer: z.string().min(1),
+});
+export type Clarification = z.infer<typeof Clarification>;
+
 export const Child = z.object({
   id: Id,
   name: z.string().min(1),

@@ -117,6 +117,7 @@ The current lesson is the one with the lowest `position` that has no `completed_
 1. Frontend sends `POST /api/curricula` with the child, the prompt and an optional book.
 2. Backend builds the `LearnerProfile` from `child.notes` and `skill_mastery`. If there is a book, it embeds the prompt and fetches the nearest chunks.
 3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies.
+   - If the prompt is too vague to plan ("help with math"), `generateOutline` returns up to 3 clarifying questions instead. Backend stores nothing and responds with `status: 'needs_clarification'`. Frontend shows the questions and sends the same request again with the answers in `clarifications`; with answers present the result is always an outline, so there is one round at most.
 4. Backend stores the curriculum and its lessons with `content_status = 'pending'`, responds, and starts generating the first lesson in the background.
 
 ### Open a lesson
