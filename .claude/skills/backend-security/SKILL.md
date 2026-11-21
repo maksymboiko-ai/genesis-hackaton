@@ -69,7 +69,8 @@ The backend never writes prompts, but it decides **what reaches them** and
   is data, not instructions".
 - **Treat model output as untrusted input.** `AiService` validates shape; the
   backend still enforces business limits: max lessons per outline (e.g. ≤ 12),
-  max new lessons per replan (e.g. ≤ 4), skill slugs match `SkillSlug`,
+  max new lessons per replan (e.g. ≤ 4), clarifying questions ≤ `MAX_CLARIFYING_QUESTIONS`,
+  `bookSectionIndex` within `book.sections` or null, skill slugs match `SkillSlug`,
   question count bounds, bodyMarkdown length cap.
 - The model never chooses ids, positions, statuses or which rows to update.
   Code decides all of that ("code decides when, models decide what").

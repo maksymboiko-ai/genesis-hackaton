@@ -100,7 +100,19 @@ Attempts for lessons of this curriculum with `created_at > last_replan_at`
 (or all, if null), newest first, take `REPLAN_WINDOW`. Only when the count
 reaches `REPLAN_WINDOW` compare the mean to `STRUGGLING_BELOW` / `EXCELLING_FROM`.
 
-## Retrieval (pgvector)
+## Retrieval (pgvector + book map)
+
+Books are mapped at ingestion (`book.sections`, `book_chunk.section_index`,
+migration `0002`). A lesson's chunks come from its section
+(`lesson.book_section_index`):
+
+- section has ≤ `LESSON_CHUNK_LIMIT` chunks → take them all;
+- otherwise embed the lesson's title + objective and call `match_book_chunks`
+  with `p_section_index`;
+- remedial / extension lesson (no section) → same search over the whole book
+  (`p_section_index: null`); retry lesson → section of the lesson it repeats.
+
+Always return `sourceChunks` in reading order (sort by `chunk_index`).
 
 ```ts
 if (embedding.length !== EMBEDDING_DIMENSIONS || !embedding.every(Number.isFinite)) {
@@ -109,11 +121,15 @@ if (embedding.length !== EMBEDDING_DIMENSIONS || !embedding.every(Number.isFinit
 const { data, error } = await db.rpc("match_book_chunks", {
   p_book_id: bookId,
   p_embedding: embedding,
-  p_limit: Math.min(limit, 10),
+  p_limit: LESSON_CHUNK_LIMIT,
+  p_section_index: sectionIndex, // number | null
 });
+const chunks = (data ?? []).sort((a, b) => a.chunk_index - b.chunk_index).map((c) => c.content);
 ```
 
-Only query books with `status = 'ready'`. Insert chunks in batches (e.g. 100).
+Only use books with `status = 'ready'`. Ingestion stores `prepareBook` output:
+`book.sections` (parse with `z.array(BookSection)`) and chunks inserted in
+batches of ~100 with `chunk_index` = array position.
 
 ## Stuck states
 
