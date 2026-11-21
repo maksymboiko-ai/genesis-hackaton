@@ -156,7 +156,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | Backend skills | ✅ | `.claude/skills/backend-*` |
 | Frontend mock of the API | ✅ | `web/src/lib/api-mock.ts`, by Frontend |
 | Supabase project + keys + `books` bucket | ❓ | needed for M0 |
-| Real `AiService` (`lib/ai/`) | ❌ | AI owner; backend uses the fake until M7 |
+| Real `AiService` (`lib/ai/`) | ✅ | AI owner; merged into `backend` from `feature/ai-functions` (`aca1237`) |
 
 ### Functionality
 
@@ -171,9 +171,9 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F7 | replan | M5 | ✅ | rule in code with contract constants; `claim_replan` + `apply_replan` RPCs; remedial + retries before the next unfinished lesson, extensions appended; ≤ 4 model lessons; failure → idle, nothing written; first new lesson pre-generated |
 | F8 | learner notes | M5 | ✅ | after every attempt, from the latest 5 attempts across subjects; capped at 2000 chars; no names sent |
 | F9 | llm_call logging | M0 | ✅ | `lib/server/ai.ts` wraps every `AiService` call: `onCall` → `llm_call`, fire-and-forget |
-| F10 | security baseline | M0–M7 | 🟡 | M0: Zod helpers, 64 KB body cap, error envelope, rate limiter, daily budget, `server-only`, env check |
+| F10 | security baseline | M0–M7 | ✅ | Zod at every edge, body caps, generic errors, per-route rate limits, daily AI budget, `server-only`, security headers, RLS + revoked function access for Supabase client roles (`0004`), `npm audit`: 0 vulnerabilities |
 | F11 | claims, failure reset, stuck recovery | M3, M5 | ✅ | stale `generating`/`running` reclaimed after 3 min; `failed` lesson retried on open after a 60 s cooldown; failed replan releases to idle |
-| F12 | fake/real AiService switch | M0, M7 | 🟡 | `AI_MODE=fake\|real`; fake done (M0), real wiring in M7 |
+| F12 | fake/real AiService switch | M0, M7 | ✅ | `AI_MODE=real` (default) calls `lib/ai` (merged from `feature/ai-functions`); `fake` for tests and keyless local runs; key checked only when a model is called |
 
 ### Modules
 
@@ -186,7 +186,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | M4 Attempts | ✅ | ✅ 7 tests + SQL test | ✅ | ✅ |
 | M5 Replan | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M6 Books | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
-| M7 Hardening | ❌ | ❌ | ❌ | ❌ |
+| M7 Hardening | ✅ | ✅ 76 tests, SQL tests, `next build`, HTTP smoke | ✅ | ⚠️ not deployed |
 
 ### Review log
 
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 14:15 | M7 | Supabase `anon` role could read every table and call the write functions → `0004` (RLS on, no policies; execute revoked); `AI_MODE=real` without a key broke every route → key now checked per model call; security headers, `poweredByHeader: false` | No CSP yet (needs Frontend); deploy to Vercel not done; real model and real Supabase not exercised from here |
 | 14:00 | M6 | Upload rate limit confirmed by tests; `match_book_chunks` checked with section filter and order | Vercel 4.5 MB body limit on uploads; chunks inserted in batches, not one transaction (cleaned up on failure) |
 | 13:52 | M5 | Background jobs ran before the response in tests, hiding the `running` state → test runner now defers jobs like `after()`; child-attempt query limited to the 5 latest curricula (URL length) | A replan that keeps failing is retried on every following attempt (one model call each) |
 | 13:44 | M4 | Contract leaves `answers` unbounded → capped at 10 and `chosenIndex` 0–3 at the edge; re-attempt kept the first completion time | Double submit stores two attempts (counts twice in the replan window) |
@@ -209,11 +210,35 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **Store layer.** Services talk to a `Store` interface (`lib/server/store/`) with two implementations: `SupabaseStore` (production) and `MemoryStore` (tests and `STORE=memory` local runs without a database). This is what makes every route testable without Supabase.
 - **`vitest@3`**, not 4: vitest 4 needs `@types/node` ≥ 22 and the app pins `^20`.
 - `GET /api/health` stays as a deploy check.
+- **`feature/ai-functions` merged into `backend`** to wire the real `AiService` (merge commit, conflicts only in `.gitignore` and `package*.json`).
+- **Migration `0004`** (not in the plan): RLS on, no policies, function execute revoked from Supabase client roles. See ADR 0003.
 - **Remedial placement.** Inserted before the next lesson the child has not done (the frontend mock inserts one lesson later).
 - **Failed lessons.** Not in the original plan: opening a `failed` lesson retries it, but only 60 s after the failed attempt.
 - **SQL tests.** `supabase/tests/0003_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 
-## 5. Open questions
+### Verification at the end of M7
+
+| Check | Result |
+|---|---|
+| `npm test` (vitest, in-memory store, fake AI) | 76 passed |
+| SQL tests on Postgres 16 + pgvector (`supabase/tests/`) | all functions, atomicity and the RLS lockdown pass |
+| `npx tsc --noEmit`, `eslint` | clean |
+| `next build` | passes; every `/api/*` route is dynamic (ƒ) |
+| `node scripts/smoke.mjs` against `next start` (`STORE=memory AI_MODE=fake`) | 15/15: real `after()` jobs, clarification → curriculum → 3 lessons → replan → notes; PDF upload → `ready` |
+| `npm audit --omit=dev` | 0 vulnerabilities |
+
+Not verified from here: the Supabase store against a real project (only type-checked; its SQL functions are tested directly) and real model calls (no key in this environment).
+
+## 6. How to run
+
+1. Supabase: apply `0001` → `0004` in order; create a **private** storage bucket `books`.
+2. `cp web/.env.example web/.env.local` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`.
+3. Frontend on the real API: `NEXT_PUBLIC_API_MOCK=false`.
+4. Without a database or key: `STORE=memory AI_MODE=fake npm run dev`.
+5. Checks: `npm test`, `npm run typecheck`, `node scripts/smoke.mjs <base url>`.
+6. On Vercel, `maxDuration` is 60 s on model routes. With Fluid compute, raise it (up to 300) for `/api/books`, or ingest big books locally.
+
+## 7. Open questions
 
 1. Who creates the Supabase project and applies migrations? Share URL + service key via a private channel only. (Developer answer: it's done by other developer, so won't implement it)
 2. `0003_backend_functions.sql` (three RPC functions + two timestamp columns) is a contract change: get a quick OK from AI and Frontend owners.

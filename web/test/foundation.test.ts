@@ -165,3 +165,21 @@ describe("GET /api/health", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });
+
+describe("AI_MODE=real", () => {
+  it("routes without model calls work without a key; model calls fail safely", async () => {
+    process.env.AI_MODE = "real";
+    delete process.env.OPENROUTER_API_KEY;
+    resetEnvForTests();
+    const original = console.error;
+    console.error = () => {};
+    try {
+      expect((await call(health, jsonRequest("GET", "/api/health"))).status).toBe(200);
+      await expect(getAi().embed(["a"])).rejects.toMatchObject({ status: 502 });
+    } finally {
+      console.error = original;
+      process.env.AI_MODE = "fake";
+      resetEnvForTests();
+    }
+  });
+});

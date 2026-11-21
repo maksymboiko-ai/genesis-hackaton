@@ -4,8 +4,9 @@ import { ok, route } from "@/lib/server/http";
 import { LIMITS } from "@/lib/server/rate-limit";
 
 // Ingestion (text extraction, book map, embeddings) runs in after() within
-// this budget. Vercel caps it at the plan's maximum.
-export const maxDuration = 300;
+// this budget. 60 s works on every Vercel plan; raise it (up to 300) when the
+// project has Fluid compute, or ingest large books with a local script.
+export const maxDuration = 60;
 
 // POST /api/books — multipart/form-data: title, file (PDF)
 export const POST = route(async (req: Request) => ok(CreateBookResponse, await uploadBook(req), 201), {

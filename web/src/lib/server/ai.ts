@@ -2,6 +2,7 @@ import "server-only";
 import type { AiCallOptions, AiService, LlmCallRecord } from "@/contracts/ai";
 import { getEnv } from "./env";
 import { HttpError, tooMany, upstream } from "./errors";
+import { aiService } from "@/lib/ai";
 import { fakeAi } from "./ai-fake";
 import { getStore } from "./store";
 
@@ -10,17 +11,13 @@ import { getStore } from "./store";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-let realAi: AiService | undefined;
-
-/** Lets the real lib/ai implementation be registered without a hard import. */
-export function registerRealAi(service: AiService) {
-  realAi = service;
-}
-
 function baseService(): AiService {
-  if (getEnv().AI_MODE === "fake") return fakeAi;
-  if (!realAi) throw new Error("AI_MODE=real but no AiService is registered");
-  return realAi;
+  const env = getEnv();
+  if (env.AI_MODE === "fake") return fakeAi;
+  // Checked here, not at startup, so routes that never call a model keep
+  // working without a key.
+  if (!env.OPENROUTER_API_KEY) throw new Error("AI_MODE=real needs OPENROUTER_API_KEY");
+  return aiService;
 }
 
 function logCall(record: LlmCallRecord) {
