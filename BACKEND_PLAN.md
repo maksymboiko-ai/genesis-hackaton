@@ -248,7 +248,7 @@ Added after checking the approved screens (`Product — learning app identity & 
 | B8 | Minutes from `estimatedMinutes` | ✅ | lesson header, plan "Up next", home "Ready for N minutes?" |
 | B9 | Mock mode: auth routes, retry, new fields | ✅ | mock accounts in localStorage, retry route |
 | C2 | Checks: types, lint, tests, SQL, build, HTTP smoke | ✅ | 98 tests; SQL 0004–0007; `next build`; smoke 26/26 incl. sign up, isolation, wrong password, logout; audit 0 |
-| C3 | Merge `backend` into `main` (local; push on approval) | ⏳ | |
+| C3 | Merge `backend` into `main` (local; push on approval) | ✅ | merged locally with `--no-ff`; not pushed |
 
 ### Verification at the end of M7
 
