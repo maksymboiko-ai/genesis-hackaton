@@ -164,8 +164,8 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 |---|---|---|---|---|
 | F1 | children + profile | M1 | ✅ | name trimmed, 1–100 chars, control chars stripped; profile never carries the name |
 | F2 | books + ingestion | M6 | ❌ | — |
-| F3 | create curriculum + clarification | M2 | ❌ | — |
-| F4 | list/get curricula | M2 | ❌ | — |
+| F3 | create curriculum + clarification | M2 | ✅ | one clarification round enforced; outline bounded (≤ 12 lessons, ≤ 5 slugs each, section index checked); `create_curriculum` RPC; first-lesson kick-off lands with M3 |
+| F4 | list/get curricula | M2 | ✅ | list newest first; unknown child → 404 |
 | F5 | lesson generation + retrieval | M3 | ❌ | — |
 | F6 | attempts, grading, mastery | M4 | ❌ | — |
 | F7 | replan | M5 | ❌ | — |
@@ -181,7 +181,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 |---|---|---|---|---|
 | M0 Foundation | ✅ | ✅ 15 tests | ✅ | ✅ |
 | M1 Children | ✅ | ✅ 6 tests | ✅ | ✅ |
-| M2 Curricula | ❌ | ❌ | ❌ | ❌ |
+| M2 Curricula | ✅ | ✅ 9 tests + SQL test | ✅ | ✅ |
 | M3 Lessons | ❌ | ❌ | ❌ | ❌ |
 | M4 Attempts | ❌ | ❌ | ❌ | ❌ |
 | M5 Replan | ❌ | ❌ | ❌ | ❌ |
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 13:35 | M2 | Model returning questions after answers would loop → now a 502; book with a broken section map → 500 instead of a bad plan | — |
 | 13:32 | M1 | Long names were silently truncated → now rejected with 400 above 100 chars | — |
 
 ---
@@ -204,6 +205,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **Store layer.** Services talk to a `Store` interface (`lib/server/store/`) with two implementations: `SupabaseStore` (production) and `MemoryStore` (tests and `STORE=memory` local runs without a database). This is what makes every route testable without Supabase.
 - **`vitest@3`**, not 4: vitest 4 needs `@types/node` ≥ 22 and the app pins `^20`.
 - `GET /api/health` stays as a deploy check.
+- **SQL tests.** `supabase/tests/0003_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 
 ## 5. Open questions
 
