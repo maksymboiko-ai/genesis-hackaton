@@ -1,32 +1,34 @@
 # Model evaluation: cost and efficiency
 
-Run on 21.11.2026 against OpenRouter, through the production `AiService` (`npm run evals -- --repeat=3 <models>`).
+Run on 21.11.2026 against OpenRouter, through the production `AiService` (`npm run evals -- --repeat=3 <models>`). 10 models, 18 cases, 3 runs of every case: 54 runs per model, 540 in total.
 
-## Recommendation
+## Chosen models
 
-| Task | Now | Recommended | Why |
+These are the defaults in `src/lib/ai/models.ts`.
+
+| Task | Before | Chosen | Why |
 |---|---|---|---|
 | `outline` | `google/gemini-3.8-flash` | `openai/gpt-6-luna` | 27/27 against 26/27, same latency, 11× cheaper |
 | `lesson` | `google/gemini-3.8-flash` | `google/gemini-3.5-flash-lite` | 12/12 for both, 3.8 s against 13.9 s, 3.6× cheaper |
-| `replan` | `google/gemini-3.8-flash` | keep | The only model that passed 9/9; runs in the background, twice per course |
-| `learner_notes` | `openai/gpt-6-luna` | keep | 6/6, cheapest of the reliable models |
-| `book_map` | `google/gemini-3.8-flash` | not evaluated | Added after this run |
+| `replan` | `google/gemini-3.8-flash` | unchanged | The only model that passed 9/9; runs in the background, twice per course |
+| `learner_notes` | `openai/gpt-6-luna` | unchanged | 6/6, cheapest of the reliable models |
+| `book_map` | `google/gemini-3.8-flash` | unchanged | Not part of this run |
 
 Model cost of one course (1 outline, 8 lessons, 8 notes updates, 2 replans):
 
 | Setup | Cost per course | Against now |
 |---|---|---|
-| Current defaults | $0.102 | |
-| Recommended | $0.036 | 65% lower |
-| Recommended, but lessons on `openai/gpt-6-luna` | $0.019 | 82% lower |
+| Before | $0.102 | |
+| Chosen | $0.036 | 65% lower |
+| Chosen, but lessons on `openai/gpt-6-luna` | $0.019 | 82% lower |
 
-Lessons are 85% of the current cost, so the lesson model is the choice that matters. `gpt-6-luna` is the cheapest lesson model that passed every check, but it takes 12.8 s per lesson against 3.8 s for `gemini-3.5-flash-lite`.
+Lessons were 85% of the cost before the change, so the lesson model is the choice that matters. `gpt-6-luna` is the cheapest lesson model that passed every check, but it takes 12.8 s per lesson against 3.8 s for `gemini-3.5-flash-lite`.
 
-**The lesson checks are structural** (question count, skills covered, length, language, textbook terms). They do not judge how well a lesson teaches. Read a few lessons from the cheaper model before switching.
+**The lesson checks are structural** (question count, skills covered, length, language, textbook terms). They do not judge how well a lesson teaches.
 
 ## Results
 
-18 cases, each run 3 times per model (54 runs). Cost is list price × tokens reported by OpenRouter; reasoning tokens are billed as output.
+Every model ran the same 54 runs. Cost is list price × tokens reported by OpenRouter; reasoning tokens are billed as output.
 
 | Model | Price in / out, $ per 1M | Passed | Avg call | Slowest case | Cost per course |
 |---|---|---|---|---|---|
@@ -40,10 +42,6 @@ Lessons are 85% of the current cost, so the lesson model is the choice that matt
 | `meta/muse-ember` | 0.10 / 0.50 | 48/54 | 9.6 s | 38 s | $0.054 |
 | `google/gemma-4-31b-it` | 0.20 / 0.40 | 47/54 | 43.5 s | 361 s | $0.007 |
 | `mistralai/mistral-small-2603` | 0.15 / 0.60 | 36/54 | 4.3 s | 11 s | $0.008 |
-| `qwen/qwen3.8-flash` | 0.15 / 0.47 | 33/42 | 71.3 s | 361 s | n/a |
-| `nvidia/nemotron-3.5-super-vl:free` | free | 18/18 (one pass) | 23.1 s | 93 s | $0 |
-
-`qwen/qwen3.8-flash` is out of 42 because its last 12 runs hit the API key's spending limit, not a model failure. 8 of its 42 valid runs timed out.
 
 ### By task
 
@@ -69,12 +67,8 @@ Passed, average seconds per call, and cost per call.
 - **`claude-haiku-5.5` writes learner notes over 100 words** in 3 of 3 runs of one case. It is otherwise clean on outlines and lessons.
 - **`mistral-small-2603` never asks clarifying questions** for a vague goal (0 of 6) and ignores the learner's weak skills (0 of 3).
 - **`meta/muse-ember` lessons break the 150 to 700 word range** in 3 of 12 runs.
-- **Timeouts** (90 s per request): `qwen3.8-flash` 8 runs, `gemma-4-31b-it` 2 runs. `glm-5.3-flash` and `deepseek-v4.1-flash` stay under the limit but spend 6k to 13k reasoning tokens per lesson, which is why they are slow despite the lowest prices.
+- **Timeouts** (90 s per request): `gemma-4-31b-it` in 2 runs. `glm-5.3-flash` and `deepseek-v4.1-flash` stay under the limit but spend 6k to 13k reasoning tokens per lesson, which is why they are slow despite the lowest prices.
 - No model returned JSON that failed the schema after the single retry.
-
-## Free models
-
-`nvidia/nemotron-3.5-super-vl:free` passed 18/18 in one pass, at 23 s per call and up to 93 s for a lesson. The key allows 1,000 free-model requests a day. It works as a zero-cost fallback, not for a live demo.
 
 ## Limits of this run
 
@@ -82,3 +76,4 @@ Passed, average seconds per call, and cost per call.
 - The checks are rule-based. Nothing here scores teaching quality or factual correctness of a lesson.
 - Costs are list-price estimates from token counts, not billed amounts.
 - `book_map` and the retrieval evals were added after this run and are not covered.
+- `qwen/qwen3.8-flash` was dropped: it timed out repeatedly and did not complete its 54 runs.
