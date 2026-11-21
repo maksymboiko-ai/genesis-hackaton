@@ -5,7 +5,6 @@ import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
-import { signUp } from '@/lib/api'
 import { APP_NAME } from '@/lib/config'
 import { useSession } from '@/lib/session'
 
@@ -29,7 +28,6 @@ export function SignUpPage() {
   const { setUser } = useSession()
   const [fields, setFields] = useState<Fields>({ name: '', email: '', password: '' })
   const [errors, setErrors] = useState<Errors>({})
-  const [formError, setFormError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const bind = (key: keyof Fields) => ({
@@ -42,7 +40,7 @@ export function SignUpPage() {
     },
   })
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const found = validate(fields)
     setErrors(found)
@@ -53,15 +51,8 @@ export function SignUpPage() {
     }
 
     setSubmitting(true)
-    setFormError('')
-    try {
-      const user = await signUp({ ...fields, name: fields.name.trim(), email: fields.email.trim() })
-      setUser(user)
-      router.push('/quiz')
-    } catch {
-      setFormError('Could not create your account. Try again.')
-      setSubmitting(false)
-    }
+    setUser({ name: fields.name.trim(), email: fields.email.trim() })
+    router.push('/quiz')
   }
 
   return (
@@ -79,12 +70,6 @@ export function SignUpPage() {
           hint={`At least ${MIN_PASSWORD} characters.`}
           {...bind('password')}
         />
-
-        {formError && (
-          <p role="alert" className="text-sm text-danger">
-            {formError}
-          </p>
-        )}
 
         <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? 'Creating account…' : 'Create account'}

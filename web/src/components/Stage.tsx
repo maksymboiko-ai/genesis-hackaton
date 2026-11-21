@@ -9,9 +9,9 @@ export type StagePath = '/signup' | '/quiz' | '/app'
 
 export function Stage({ path, children }: { path?: StagePath; children?: ReactNode }) {
   const router = useRouter()
-  const { ready, user, quiz } = useSession()
+  const { ready, user, childId } = useSession()
 
-  const home: StagePath = !user ? '/signup' : !quiz ? '/quiz' : '/app'
+  const home: StagePath = !user ? '/signup' : !childId ? '/quiz' : '/app'
   const allowed = ready && home === path
 
   useEffect(() => {
