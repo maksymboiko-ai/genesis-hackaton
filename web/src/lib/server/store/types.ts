@@ -103,6 +103,36 @@ export type AttemptRow = {
 
 export type ChunkHit = { chunkIndex: number; content: string };
 
+export type SubscriptionRow = {
+  ownerId: string;
+  plan: "yearly" | "monthly";
+  trialStartedAt: string;
+  trialEndsAt: string;
+  paidAt: string | null;
+};
+
+/**
+ * What the admin dashboard is computed from: every row of each table, cut
+ * down to the columns that are counted. No names, prompts or lesson content.
+ */
+export type AnalyticsRows = {
+  children: { id: string; ownerId: string | null; createdAt: string }[];
+  curricula: { id: string; childId: string; subject: string }[];
+  lessons: {
+    id: string;
+    curriculumId: string;
+    kind: LessonKind;
+    contentStatus: ContentStatus;
+    completedAt: string | null;
+    lastScore: number | null;
+  }[];
+  attempts: { lessonId: string; score: number; createdAt: string }[];
+  replans: { trigger: "struggling" | "excelling" }[];
+  subscriptions: SubscriptionRow[];
+  /** Only the calls after the given moment. */
+  llmCalls: (LlmCallRecord & { createdAt: string })[];
+};
+
 export interface Store {
   /** Cheap connectivity check. */
   ping(): Promise<void>;
@@ -227,4 +257,15 @@ export interface Store {
   // --- llm_call ---
   insertLlmCall(record: LlmCallRecord): Promise<void>;
   countLlmCallsSince(sinceIso: string): Promise<number>;
+
+  // --- subscription ---
+  /**
+   * Starts the account's trial unless it already has a subscription. Returns
+   * the stored row either way: the first trial is never replaced.
+   */
+  startTrial(input: { ownerId: string; plan: "yearly" | "monthly"; trialEndsAtIso: string }): Promise<SubscriptionRow>;
+
+  // --- admin analytics ---
+  /** All rows the dashboard counts, with model calls after llmSinceIso. */
+  analyticsRows(llmSinceIso: string): Promise<AnalyticsRows>;
 }
