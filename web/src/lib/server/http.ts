@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import type { ApiError } from "@/contracts/api";
 import { authenticate, type AuthUser } from "./auth";
-import { HttpError, badRequest, crossSite, tooLarge, unauthorized, unsupported } from "./errors";
+import { getEnv } from "./env";
+import { HttpError, badRequest, crossSite, notFound, tooLarge, unauthorized, unsupported } from "./errors";
 import { rateLimit, type RateLimitRule } from "./rate-limit";
 
 export const MAX_JSON_BYTES = 64 * 1024;
@@ -83,6 +84,18 @@ export function route<C>(handler: AuthedHandler<C>, options: RouteOptions = {}):
     const res = await handler(req, ctx, session.user);
     for (const c of session.setCookies) res.headers.append("Set-Cookie", c);
     return res;
+  }, options);
+}
+
+/**
+ * A route for the team only: a signed-in account whose email is listed in
+ * ADMIN_EMAILS. Any other account gets "not found", so the route cannot be
+ * told apart from one that does not exist.
+ */
+export function adminRoute<C>(handler: AuthedHandler<C>, options: RouteOptions = {}): Handler<C> {
+  return route((req, ctx, user) => {
+    if (!getEnv().ADMIN_EMAILS.includes(user.email.trim().toLowerCase())) throw notFound("Page");
+    return handler(req, ctx, user);
   }, options);
 }
 

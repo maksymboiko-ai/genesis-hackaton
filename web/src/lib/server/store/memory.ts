@@ -1,6 +1,7 @@
 import "server-only";
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
+  AnalyticsRows,
   AttemptRow,
   BookRow,
   ChunkHit,
@@ -11,6 +12,7 @@ import type {
   NewLesson,
   ReplanEventRow,
   Store,
+  SubscriptionRow,
 } from "./types";
 
 type LlmCallRow = LlmCallRecord & { id: string; createdAt: string };
@@ -27,6 +29,7 @@ export type MemoryData = {
   activityDays: { childId: string; day: string }[];
   files: Map<string, Uint8Array>;
   llmCalls: LlmCallRow[];
+  subscriptions: SubscriptionRow[];
 };
 
 
@@ -46,7 +49,7 @@ function cosine(a: number[], b: number[]): number {
 }
 
 export function emptyData(): MemoryData {
-  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], activityDays: [], files: new Map(), llmCalls: [] };
+  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], activityDays: [], files: new Map(), llmCalls: [], subscriptions: [] };
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -430,5 +433,45 @@ export class MemoryStore implements Store {
 
   async countLlmCallsSince(sinceIso: string) {
     return this.data.llmCalls.filter((c) => c.createdAt > sinceIso).length;
+  }
+
+  async startTrial(input: { ownerId: string; plan: "yearly" | "monthly"; trialEndsAtIso: string }) {
+    let row = this.data.subscriptions.find((s) => s.ownerId === input.ownerId);
+    if (!row) {
+      const startedAt = now();
+      if (!(input.trialEndsAtIso > startedAt)) throw new Error("check violation: trial_ends_at");
+      row = { ownerId: input.ownerId, plan: input.plan, trialStartedAt: startedAt, trialEndsAt: input.trialEndsAtIso, paidAt: null };
+      this.data.subscriptions.push(row);
+    }
+    return copy(row);
+  }
+
+  async analyticsRows(llmSinceIso: string): Promise<AnalyticsRows> {
+    return copy({
+      children: this.data.children.map((c) => ({ id: c.id, ownerId: c.ownerId, createdAt: c.createdAt })),
+      curricula: this.data.curricula.map((c) => ({ id: c.id, childId: c.childId, subject: c.subject })),
+      lessons: this.data.lessons.map((l) => ({
+        id: l.id,
+        curriculumId: l.curriculumId,
+        kind: l.kind,
+        contentStatus: l.contentStatus,
+        completedAt: l.completedAt,
+        lastScore: l.lastScore,
+      })),
+      attempts: this.data.attempts.map((a) => ({ lessonId: a.lessonId, score: a.score, createdAt: a.createdAt })),
+      replans: this.data.replanEvents.map((e) => ({ trigger: e.trigger })),
+      subscriptions: this.data.subscriptions,
+      llmCalls: this.data.llmCalls
+        .filter((c) => c.createdAt > llmSinceIso)
+        .map((c) => ({
+          task: c.task,
+          model: c.model,
+          latencyMs: c.latencyMs,
+          inputTokens: c.inputTokens,
+          outputTokens: c.outputTokens,
+          ok: c.ok,
+          createdAt: c.createdAt,
+        })),
+    });
   }
 }

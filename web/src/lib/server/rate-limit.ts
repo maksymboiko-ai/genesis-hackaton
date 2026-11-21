@@ -50,4 +50,6 @@ export const LIMITS = {
   // Password guessing: a few tries, then one every 12 seconds per IP.
   login: { name: "login", capacity: 10, perMinute: 5 },
   signup: { name: "signup", capacity: 5, perMinute: 1 },
+  // Reads whole tables to count them.
+  admin: { name: "admin", capacity: 20, perMinute: 10 },
 } satisfies Record<string, RateLimitRule>;

@@ -4,6 +4,7 @@ import { Check, Lock } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
+import { StatusNote } from '@/components/StatusNote'
 import { SubjectTile } from '@/components/SubjectTile'
 import { Wordmark } from '@/components/Wordmark'
 import { api } from '@/lib/api'
@@ -20,6 +21,7 @@ export function PaywallPage() {
   const planId = useSearchParams().get('plan')
   const [billing, setBilling] = useState<Billing>('yearly')
   const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
 
   const loadPlan = useCallback(() => api.getCurriculum(planId!), [planId])
   const plan = useResource(planId ? loadPlan : null)
@@ -139,13 +141,21 @@ export function PaywallPage() {
             block
             busy={starting}
             className="mt-2"
-            onClick={() => {
+            onClick={async () => {
               setStarting(true)
-              router.push(target)
+              setStartError(null)
+              try {
+                await api.startTrial({ plan: billing })
+                router.push(target)
+              } catch (error) {
+                setStartError(error instanceof Error ? error.message : 'Something went wrong. Try again.')
+                setStarting(false)
+              }
             }}
           >
             Start {PRICING.trial} free trial
           </Button>
+          {startError && <StatusNote tone="error">{startError}</StatusNote>}
           <p className="sm text-center">Then {price}. Cancel anytime. We’ll remind you before the trial ends.</p>
           <Button variant="ghost" block onClick={() => router.push(target)} style={{ height: 44 }}>
             Try lesson 1 first

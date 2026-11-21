@@ -17,6 +17,12 @@ const EnvSchema = z
     OPENROUTER_API_KEY: z.string().min(20).optional(),
     // Model calls allowed per rolling 24 hours, across the whole app.
     DAILY_LLM_CALL_LIMIT: z.coerce.number().int().positive().default(3000),
+    // Emails of the accounts that may open /admin, separated by commas.
+    // Empty: nobody.
+    ADMIN_EMAILS: z
+      .string()
+      .default("")
+      .transform((list) => list.split(",").map((email) => email.trim().toLowerCase()).filter(Boolean)),
   })
   .superRefine((env, ctx) => {
     if (env.STORE === "supabase") {

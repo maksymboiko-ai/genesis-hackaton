@@ -2,6 +2,7 @@ import "server-only";
 import { createClient, type PostgrestError, type SupabaseClient } from "@supabase/supabase-js";
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
+  AnalyticsRows,
   AttemptRow,
   BookRow,
   ChunkHit,
@@ -12,6 +13,7 @@ import type {
   NewLesson,
   ReplanEventRow,
   Store,
+  SubscriptionRow,
 } from "./types";
 
 /** Throws a plain Error on a database error; the route wrapper hides it. */
@@ -153,6 +155,25 @@ const toAttempt = (r: AttemptDb): AttemptRow => ({
   results: r.results,
   createdAt: r.created_at,
 });
+
+type SubscriptionDb = {
+  owner_id: string;
+  plan: SubscriptionRow["plan"];
+  trial_started_at: string;
+  trial_ends_at: string;
+  paid_at: string | null;
+};
+const SUBSCRIPTION_COLUMNS = "owner_id, plan, trial_started_at, trial_ends_at, paid_at";
+const toSubscription = (r: SubscriptionDb): SubscriptionRow => ({
+  ownerId: r.owner_id,
+  plan: r.plan,
+  trialStartedAt: r.trial_started_at,
+  trialEndsAt: r.trial_ends_at,
+  paidAt: r.paid_at,
+});
+
+// The API returns at most 1000 rows per request; whole tables are read in pages.
+const PAGE_ROWS = 1000;
 
 export class SupabaseStore implements Store {
   readonly db: SupabaseClient;
@@ -578,6 +599,86 @@ export class SupabaseStore implements Store {
       .gt("created_at", sinceIso);
     check(error, "count llm_call");
     return count ?? 0;
+  }
+
+  async startTrial(input: { ownerId: string; plan: "yearly" | "monthly"; trialEndsAtIso: string }) {
+    // Insert unless the account has a row already; then read what is stored.
+    const { error: e1 } = await this.db
+      .from("subscription")
+      .upsert(
+        { owner_id: input.ownerId, plan: input.plan, trial_ends_at: input.trialEndsAtIso },
+        { onConflict: "owner_id", ignoreDuplicates: true },
+      );
+    check(e1, "start trial");
+    const { data, error } = await this.db
+      .from("subscription")
+      .select(SUBSCRIPTION_COLUMNS)
+      .eq("owner_id", input.ownerId)
+      .single();
+    check(error, "get subscription");
+    return toSubscription(data as SubscriptionDb);
+  }
+
+  /** Every row of a table (after sinceIso, if given), in pages, in a stable order. */
+  private async allRows<T>(table: string, columns: string, orderBy: string, sinceIso?: string): Promise<T[]> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += PAGE_ROWS) {
+      let query = this.db.from(table).select(columns);
+      if (sinceIso) query = query.gt("created_at", sinceIso);
+      const { data, error } = await query.order(orderBy).range(from, from + PAGE_ROWS - 1);
+      check(error, `list ${table}`);
+      const page = (data ?? []) as T[];
+      rows.push(...page);
+      if (page.length < PAGE_ROWS) return rows;
+    }
+  }
+
+  async analyticsRows(llmSinceIso: string): Promise<AnalyticsRows> {
+    const [children, curricula, lessons, attempts, replans, subscriptions, llmCalls] = await Promise.all([
+      this.allRows<{ id: string; owner_id: string | null; created_at: string }>("child", "id, owner_id, created_at", "id"),
+      this.allRows<{ id: string; child_id: string; subject: string }>("curriculum", "id, child_id, subject", "id"),
+      this.allRows<Pick<LessonDb, "id" | "curriculum_id" | "kind" | "content_status" | "completed_at" | "last_score">>(
+        "lesson",
+        "id, curriculum_id, kind, content_status, completed_at, last_score",
+        "id",
+      ),
+      this.allRows<Pick<AttemptDb, "lesson_id" | "score" | "created_at">>("attempt", "lesson_id, score, created_at", "id"),
+      this.allRows<{ trigger: "struggling" | "excelling" }>("replan_event", "trigger", "id"),
+      this.allRows<SubscriptionDb>("subscription", SUBSCRIPTION_COLUMNS, "owner_id"),
+      this.allRows<{
+        task: LlmCallRecord["task"];
+        model: string;
+        latency_ms: number;
+        input_tokens: number | null;
+        output_tokens: number | null;
+        ok: boolean;
+        created_at: string;
+      }>("llm_call", "task, model, latency_ms, input_tokens, output_tokens, ok, created_at", "id", llmSinceIso),
+    ]);
+    return {
+      children: children.map((r) => ({ id: r.id, ownerId: r.owner_id, createdAt: r.created_at })),
+      curricula: curricula.map((r) => ({ id: r.id, childId: r.child_id, subject: r.subject })),
+      attempts: attempts.map((r) => ({ lessonId: r.lesson_id, score: r.score, createdAt: r.created_at })),
+      lessons: lessons.map((r) => ({
+        id: r.id,
+        curriculumId: r.curriculum_id,
+        kind: r.kind,
+        contentStatus: r.content_status,
+        completedAt: r.completed_at,
+        lastScore: r.last_score,
+      })),
+      replans,
+      subscriptions: subscriptions.map(toSubscription),
+      llmCalls: llmCalls.map((r) => ({
+        task: r.task,
+        model: r.model,
+        latencyMs: r.latency_ms,
+        inputTokens: r.input_tokens,
+        outputTokens: r.output_tokens,
+        ok: r.ok,
+        createdAt: r.created_at,
+      })),
+    };
   }
 }
 
