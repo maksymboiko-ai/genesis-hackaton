@@ -16,6 +16,13 @@ export const iso = (value: string): string => new Date(value).toISOString();
 
 const validSkills = (skills: string[]) => skills.filter((s) => SkillSlug.safeParse(s).success);
 
+/** Questions in a written lesson's quiz, read without parsing the whole content. */
+function questionCount(row: LessonRow): number | null {
+  if (row.contentStatus !== "ready") return null;
+  const questions = (row.content as { questions?: unknown } | null)?.questions;
+  return Array.isArray(questions) && questions.length > 0 ? questions.length : null;
+}
+
 export function toLessonSummary(row: LessonRow): LessonSummary {
   return {
     id: row.id,
@@ -29,6 +36,7 @@ export function toLessonSummary(row: LessonRow): LessonSummary {
     reason: row.reason,
     estimatedMinutes: row.estimatedMinutes,
     contentStatus: row.contentStatus,
+    questionCount: questionCount(row),
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     lastScore: row.lastScore,
   };

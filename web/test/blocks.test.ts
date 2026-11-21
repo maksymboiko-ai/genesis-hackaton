@@ -212,6 +212,10 @@ describe("blocks through the backend", () => {
     expect(blocks.map((b) => b.type).sort()).toEqual(["check", "graph", "number_line", "steps"]);
     for (const block of blocks) expect(lesson.content!.bodyMarkdown).toContain(`[[${block.id}]]`);
     expect(JSON.stringify(res.body)).not.toMatch(/correctIndex|choiceFeedback|explanation/);
+    // The quiz length is known once the lesson is written, not before.
+    expect(lesson.questionCount).toBe(3);
+    const unwritten = await call(getLesson, jsonRequest("GET", "/x"), { lessonId: curriculum.lessons[3].id });
+    expect(GetLessonResponse.parse(unwritten.body).questionCount).toBeNull();
   });
 
   it("checkLessonContent drops blocks that cannot be shown, and reads lessons stored without blocks", () => {

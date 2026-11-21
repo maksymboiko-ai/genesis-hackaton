@@ -1,5 +1,6 @@
 import "server-only";
 import type { LessonContentInput } from "@/contracts/domain";
+import { lessonWords } from "@/lib/lesson-blocks";
 
 // Lesson length in minutes (LessonSummary.estimatedMinutes). Before a lesson
 // is written, the model's estimate from the outline is used; once the content
@@ -27,9 +28,7 @@ const clamp = (v: number) => Math.min(MAX_MINUTES, Math.max(MIN_MINUTES, Math.ro
 export function minutesFromContent(content: LessonContentInput, gradeLevel: number): number {
   const blocks = content.blocks ?? [];
   // A stepped example is read too; its words count with the body.
-  const stepped = blocks.flatMap((b) => (b.type === "steps" ? b.steps.map((s) => `${s.text} ${s.math}`) : []));
-  const text = [content.bodyMarkdown.replace(/\[\[[a-z0-9-]+\]\]/g, " "), ...stepped].join(" ").replace(/[#*_`>\-[\]()]/g, " ");
-  const words = text.split(/\s+/).filter(Boolean).length;
+  const words = lessonWords(content.bodyMarkdown.replace(/[#*_`>\-()]/g, " "), blocks);
   return clamp(
     Math.ceil(
       words / wordsPerMinute(gradeLevel) +

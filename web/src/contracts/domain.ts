@@ -110,6 +110,9 @@ export const LessonSummary = z.object({
   // the outline until the content is ready, then computed from the content.
   estimatedMinutes: z.number().int().min(1).max(60),
   contentStatus: ContentStatus,
+  // Questions in the lesson's quiz; null until the lesson is written. With
+  // lastScore it gives the score as "6 of 7".
+  questionCount: z.number().int().min(1).nullable(),
   completedAt: z.string().datetime().nullable(),
   lastScore: z.number().min(0).max(1).nullable(),
 });

@@ -179,6 +179,7 @@ function newLesson(
     // Mock only: the backend takes the model's estimate, then computes it from the content.
     estimatedMinutes: outline.estimatedMinutes ?? 6 + (outline.title.length % 6),
     contentStatus: 'pending',
+    questionCount: null,
     completedAt: null,
     lastScore: null,
     content: null,
@@ -341,7 +342,7 @@ function omit<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit
 }
 
 function summary(lesson: StoredLesson): LessonSummary {
-  return omit(lesson, 'content', 'readyAt')
+  return { ...omit(lesson, 'content', 'readyAt'), questionCount: lesson.content?.questions.length ?? null }
 }
 
 function publicCurriculum(db: Db, curriculum: StoredCurriculum): Curriculum {

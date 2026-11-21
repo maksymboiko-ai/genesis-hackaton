@@ -18,6 +18,7 @@ import {
   type LessonContent,
 } from "@/contracts/domain";
 import { lessonSize } from "@/lib/ai/prompts";
+import { lessonWords } from "@/lib/lesson-blocks";
 import { BOOK_SECTION_TITLES, BOOK_TEXT, BOOK_TITLE } from "./fixtures/book";
 import { LONG_BOOK, PLAIN_BOOK, type MapBook } from "./fixtures/map-books";
 
@@ -253,7 +254,8 @@ async function lessonCase(
 ): Promise<string[]> {
   const content = await ai.generateLesson(input, options);
   const tested = new Set(content.questions.map((q) => q.skill));
-  const bodyWords = words(content.bodyMarkdown);
+  // Counted the way the lesson is checked: stepped examples are lesson text.
+  const bodyWords = lessonWords(content.bodyMarkdown, content.blocks);
   const size = lessonSize(input.learner.gradeLevel);
   // The prompt gives a range; a lesson somewhat outside it is still fine.
   const minWords = Math.round(size.minWords * 0.75);
@@ -263,7 +265,7 @@ async function lessonCase(
     [`${size.questions - 1} to ${size.questions + 1} questions (got ${content.questions.length})`]:
       Math.abs(content.questions.length - size.questions) <= 1,
     "every skill tested": input.lesson.skills.every((skill) => tested.has(skill)),
-    [`body is ${minWords} to ${maxWords} words (got ${bodyWords})`]: bodyWords >= minWords && bodyWords <= maxWords,
+    [`lesson is ${minWords} to ${maxWords} words (got ${bodyWords})`]: bodyWords >= minWords && bodyWords <= maxWords,
     [`2 or 3 quick checks (got ${count("check")})`]: count("check") >= 2 && count("check") <= 4,
     "a stepped example": count("steps") >= 1,
     "a Key idea section": /^#{2,3} .*key idea/im.test(content.bodyMarkdown),

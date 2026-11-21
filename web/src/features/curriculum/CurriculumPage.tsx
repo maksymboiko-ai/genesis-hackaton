@@ -16,7 +16,6 @@ import { useResource } from '@/lib/useResource'
 import { KeepGoing } from './KeepGoing'
 import './plan.css'
 
-const QUESTIONS_SHOWN = 5
 const DROP_GAP_MS = 80
 const STAGE_MS = 1100
 const STAGES = ['Comparing the answers', 'Looking for a repeated pattern', 'Choosing what to add']
@@ -59,8 +58,10 @@ function changeLine(lessons: LessonSummary[]) {
   return `Added ${parts.length ? `${parts.join(', ')} and ${last}` : last}`
 }
 
-function scoreText(score: number | null) {
-  return score === null ? null : `${Math.round(score * QUESTIONS_SHOWN)}/${QUESTIONS_SHOWN}`
+// "6/7" once the quiz length is known, a percentage otherwise.
+function scoreText(score: number | null, questions: number | null) {
+  if (score === null) return null
+  return questions ? `${Math.round(score * questions)}/${questions}` : `${Math.round(score * 100)}%`
 }
 
 type NodeState = 'done' | 'next' | 'prep' | 'up'
@@ -114,7 +115,7 @@ function PlanRow({
   isNew: boolean
   dropIndex: number | null
 }) {
-  const score = scoreText(lesson.lastScore)
+  const score = scoreText(lesson.lastScore, lesson.questionCount)
   const showKind = lesson.kind !== 'core' && state !== 'done'
   const meta = (state === 'done' && score) || showKind || isNew || state === 'prep'
   const className = `row cp-row ${added ? 'added' : ''} ${dropIndex !== null ? 'a-drop' : ''}`

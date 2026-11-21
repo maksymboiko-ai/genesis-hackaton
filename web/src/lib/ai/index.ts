@@ -20,6 +20,7 @@ import {
   MAX_CLARIFYING_QUESTIONS,
   type BookSection,
 } from "@/contracts/domain";
+import { lessonWords } from "@/lib/lesson-blocks";
 import { buildBlocks } from "./blocks";
 import { chunkText } from "./chunk";
 import { callEmbeddings, callStructured, InvalidOutputError } from "./client";
@@ -30,10 +31,14 @@ import {
   extendPrompt,
   learnerNotesPrompt,
   lessonPrompt,
+  lessonSize,
   outlinePrompt,
   replanPrompt,
   sectionLabel,
 } from "./prompts";
+
+// A lesson under this share of the smallest length asked for is sent back.
+const SHORT_LESSON = 0.8;
 
 // OpenRouter's embeddings endpoint takes a batch; keep requests modest.
 const EMBED_BATCH_SIZE = 64;
@@ -149,9 +154,11 @@ export const aiService: AiService = {
 
   generateLesson(input, options) {
     const prompt = lessonPrompt(input);
-    // A broken block is sent back once with what is wrong. If the second
-    // answer still has one, the lesson is kept without that block: a lesson
-    // missing a figure is better than no lesson.
+    const size = lessonSize(input.learner.gradeLevel);
+    // A broken block, or a lesson much shorter or barer than asked for, is
+    // sent back once with what is wrong. The second answer is taken as it
+    // is, without any block that is still broken: a lesson missing a figure
+    // is better than no lesson.
     let answers = 0;
     return callStructured({
       task: "lesson",
@@ -163,8 +170,18 @@ export const aiService: AiService = {
       check: (output) => {
         const built = buildBlocks(output);
         const first = ++answers === 1;
-        if (built.problems.length && first) {
-          throw new InvalidOutputError(built.problems.slice(0, 6).join("; "));
+        const total = lessonWords(built.bodyMarkdown, built.blocks);
+        const count = (type: string) => built.blocks.filter((block) => block.type === type).length;
+        const problems = [
+          ...built.problems,
+          ...(total < size.minWords * SHORT_LESSON
+            ? [`the lesson is only ${total} words long; write the complete lesson, at least ${size.minWords} words, with every idea explained step by step and two worked examples`]
+            : []),
+          ...(count("check") < 2 ? [`the lesson has ${count("check")} checks; it needs 2 or 3, each placed in the body`] : []),
+          ...(count("steps") < 1 ? ["the lesson needs a stepped example, placed in the body"] : []),
+        ];
+        if (problems.length && first) {
+          throw new InvalidOutputError(problems.slice(0, 6).join("; "));
         }
         const questions = output.questions.map((question, index) => {
           const label = `question ${index + 1}`;

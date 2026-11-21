@@ -79,6 +79,18 @@ export function placeBlocks(
   };
 }
 
+/**
+ * Words the child reads in a lesson: the body without its placeholders, plus
+ * the stepped examples, which hold worked examples moved out of the body.
+ */
+export function lessonWords(bodyMarkdown: string, blocks: LessonBlock[]): number {
+  const stepped = blocks.flatMap((block) =>
+    block.type === "steps" ? [block.title, ...block.steps.map((step) => `${step.text} ${step.math}`)] : [],
+  );
+  const text = [bodyMarkdown.replace(/\[\[[a-z0-9-]+\]\]/g, " "), ...stepped].join(" ");
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
 /** The parameters' starting values, by name. */
 export function startScope(graph: Pick<GraphBlock, "parameters">): Scope {
   return Object.fromEntries(graph.parameters.map((p) => [p.name, p.value]));
