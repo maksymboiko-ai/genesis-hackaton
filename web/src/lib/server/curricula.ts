@@ -16,6 +16,7 @@ import { toCurriculum, toCurriculumListItem } from "./mappers";
 import { getStore } from "./store";
 import type { NewLesson } from "./store/types";
 import { cleanText, toSkillSlug } from "./text";
+import { cleanMinutes, fallbackMinutes } from "./timing";
 
 // Limits on what the model may produce for one curriculum (backend-security §3).
 export const MAX_OUTLINE_LESSONS = 12;
@@ -30,8 +31,15 @@ export type ValidOutline = { subject: string; title: string; lessons: NewLesson[
  * dropped, section indexes outside the book map become null, extra lessons are
  * cut. Throws if nothing usable is left.
  */
-export function validateOutline(outline: OutlineOutput, sections: BookSection[], fallbackTitle: string): ValidOutline {
+export function validateOutline(
+  outline: OutlineOutput,
+  sections: BookSection[],
+  fallbackTitle: string,
+  gradeLevel: number,
+): ValidOutline {
   const sectionIndexes = new Set(sections.map((s) => s.index));
+  const estimates = outline.lessons.map((l) => l.estimatedMinutes);
+  const fallback = fallbackMinutes(estimates, gradeLevel);
   const lessons: NewLesson[] = [];
   for (const lesson of outline.lessons) {
     if (lessons.length >= MAX_OUTLINE_LESSONS) break;
@@ -51,6 +59,7 @@ export function validateOutline(outline: OutlineOutput, sections: BookSection[],
       skills,
       retryOfLessonId: null,
       reason: null,
+      estimatedMinutes: cleanMinutes(lesson.estimatedMinutes, fallback),
       bookSectionIndex: index !== null && Number.isInteger(index) && sectionIndexes.has(index) ? index : null,
     });
   }
@@ -108,7 +117,7 @@ export async function createCurriculum(body: CreateCurriculumRequest): Promise<C
     return { status: "needs_clarification", questions };
   }
 
-  const outline = validateOutline(result.outline, bookSections, prompt);
+  const outline = validateOutline(result.outline, bookSections, prompt, learner.gradeLevel);
   const store = getStore();
   const id = await store.createCurriculum({
     childId: body.childId,

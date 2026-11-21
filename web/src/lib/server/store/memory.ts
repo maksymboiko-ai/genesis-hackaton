@@ -152,6 +152,9 @@ export class MemoryStore implements Store {
 
   newLessonRow(curriculumId: string, position: number, l: NewLesson): LessonRow {
     if (!l.title || !l.objective) throw new Error("not null violation: lesson");
+    if (!Number.isInteger(l.estimatedMinutes) || l.estimatedMinutes < 1 || l.estimatedMinutes > 60) {
+      throw new Error("check violation: estimated_minutes");
+    }
     return {
       id: uuid(),
       curriculumId,
@@ -162,6 +165,7 @@ export class MemoryStore implements Store {
       skills: [...l.skills],
       retryOfLessonId: l.retryOfLessonId,
       reason: l.reason,
+      estimatedMinutes: l.estimatedMinutes,
       contentStatus: "pending",
       content: null,
       completedAt: null,
@@ -250,10 +254,11 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async saveLessonContent(id: string, content: unknown) {
+  async saveLessonContent(id: string, content: unknown, estimatedMinutes: number) {
     const row = this.data.lessons.find((l) => l.id === id && l.contentStatus === "generating");
     if (!row) return;
     row.content = copy(content);
+    row.estimatedMinutes = estimatedMinutes;
     row.contentStatus = "ready";
   }
 

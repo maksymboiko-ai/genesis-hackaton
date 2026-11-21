@@ -20,6 +20,9 @@ export type Prompt = { system: string; user: string };
 const STYLE_RULE =
   "Write in American English and follow US school conventions: grade levels, spelling, units and math notation.";
 
+const ESTIMATE_RULE =
+  "Give every lesson estimatedMinutes: the whole minutes this child needs to read it and answer its quiz, from 3 to 30. A lesson is 250 to 450 words plus 4 or 5 questions, so typically 6 to 10 minutes for grades 1 to 4 and 8 to 15 above; more for dense topics, less for short reviews.";
+
 const SKILL_RULE =
   'A skill is a lowercase kebab-case slug naming one narrow, testable ability, e.g. "solving-linear-equations". If a known skill fits, reuse its slug exactly instead of inventing a near-duplicate.';
 
@@ -115,6 +118,7 @@ export function outlinePrompt(input: GenerateOutlineInput): Prompt {
     system: join([
       "You design personal curricula for school children. From a goal stated by a parent or child you plan an ordered list of short lessons.",
       "Each lesson has a title, a one-sentence objective saying what the child will be able to do, and the 1 to 3 skills it teaches. Order the lessons so each builds on the ones before it.",
+      ESTIMATE_RULE,
       bookRule,
       "Adapt to the learner. Where mastery of a related skill is low, start with prerequisites, take smaller steps and plan more practice. Where it is high, skip the basics and go deeper. Fit the grade level.",
       SKILL_RULE,
@@ -193,6 +197,7 @@ export function replanPrompt(input: ReplanInput): Prompt {
       task,
       "The diagnosis summary is 1 to 2 sentences addressed to the parent, specific and kind. The diagnosis childMessage is 1 to 2 sentences addressed to the child about the same change: warm, concrete, at their grade level, with no scores and no words like failed or wrong.",
       'Each new lesson has a title, a one-sentence objective, 1 to 3 skills and a reason: one sentence of at most 25 words to the child on why this lesson was added, naming what in their answers led to it ("You mixed up the sign when a negative number moved, so we start there").',
+      ESTIMATE_RULE,
       SKILL_RULE,
       STYLE_RULE,
     ]),

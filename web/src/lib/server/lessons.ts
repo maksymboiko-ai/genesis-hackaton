@@ -10,6 +10,7 @@ import { chunksForLesson } from "./retrieval";
 import { getStore } from "./store";
 import type { LessonRow } from "./store/types";
 import { cleanText, sanitizeMarkdown } from "./text";
+import { minutesFromContent } from "./timing";
 
 // A job still 'generating' after this long is treated as dead (ADR 0001).
 export const STALE_JOB_MS = 3 * 60 * 1000;
@@ -83,7 +84,8 @@ export async function generateLessonContent(lessonId: string): Promise<void> {
         .slice(-MAX_PREVIOUS_TITLES),
       sourceChunks,
     });
-    await store.saveLessonContent(lessonId, checkLessonContent(content));
+    const checked = checkLessonContent(content);
+    await store.saveLessonContent(lessonId, checked, minutesFromContent(checked, learner.gradeLevel));
   } catch (err) {
     await store.failLesson(lessonId).catch(() => {});
     throw err;

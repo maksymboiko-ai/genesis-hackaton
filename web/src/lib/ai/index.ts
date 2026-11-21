@@ -48,6 +48,15 @@ function nonEmpty(text: string, what: string): string {
   return trimmed;
 }
 
+// Minutes the model gives a lesson, rounded and kept within 3 to 30; a near
+// miss is not worth a retry.
+function minutes(value: number, what: string): number {
+  if (!Number.isFinite(value)) {
+    throw new InvalidOutputError(`${what} estimatedMinutes must be a number`);
+  }
+  return Math.min(30, Math.max(3, Math.round(value)));
+}
+
 function checkLessonOutlines<T extends LessonOutline>(lessons: T[]): T[] {
   if (!lessons.length) throw new InvalidOutputError("lessons is empty");
   return lessons.map((lesson, index) => {
@@ -89,8 +98,9 @@ export const aiService: AiService = {
           outline: {
             subject: nonEmpty(draft.subject, "subject").toLowerCase(),
             title: nonEmpty(draft.title, "title"),
-            lessons: checkLessonOutlines(draft.lessons).map((lesson) => ({
+            lessons: checkLessonOutlines(draft.lessons).map((lesson, index) => ({
               ...lesson,
+              estimatedMinutes: minutes(lesson.estimatedMinutes, `lesson ${index + 1}`),
               // -1, or anything else that is not a section of this book,
               // means the lesson has no section.
               bookSectionIndex: input.bookSections.some(
@@ -200,6 +210,7 @@ export const aiService: AiService = {
           (lesson, index) => ({
             ...lesson,
             reason: nonEmpty(lesson.reason, `lesson ${index + 1} reason`),
+            estimatedMinutes: minutes(lesson.estimatedMinutes, `lesson ${index + 1}`),
           }),
         ),
       }),

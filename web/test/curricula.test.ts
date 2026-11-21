@@ -33,14 +33,15 @@ describe("validateOutline", () => {
         subject: " Math ",
         title: "Fractions",
         lessons: [
-          { title: "One", objective: "o", skills: ["Adding Fractions", "!!!", "adding-fractions"], bookSectionIndex: 1 },
-          { title: "Two", objective: "o", skills: [], bookSectionIndex: 7 },
-          { title: "", objective: "o", skills: ["x"], bookSectionIndex: null },
-          { title: "Three", objective: "o", skills: ["x"], bookSectionIndex: 0.5 },
+          { title: "One", objective: "o", skills: ["Adding Fractions", "!!!", "adding-fractions"], bookSectionIndex: 1, estimatedMinutes: 8 },
+          { title: "Two", objective: "o", skills: [], bookSectionIndex: 7, estimatedMinutes: 8 },
+          { title: "", objective: "o", skills: ["x"], bookSectionIndex: null, estimatedMinutes: 8 },
+          { title: "Three", objective: "o", skills: ["x"], bookSectionIndex: 0.5, estimatedMinutes: 8 },
         ],
       },
       sections,
       "prompt",
+      5,
     );
     expect(out.subject).toBe("Math");
     expect(out.lessons).toHaveLength(3);
@@ -48,12 +49,12 @@ describe("validateOutline", () => {
     expect(out.lessons[1]).toMatchObject({ skills: ["two"], bookSectionIndex: null });
     expect(out.lessons[2].bookSectionIndex).toBeNull();
 
-    const many = Array.from({ length: 50 }, (_, i) => ({ title: `L${i}`, objective: "o", skills: ["s"], bookSectionIndex: null }));
-    expect(validateOutline({ subject: "s", title: "t", lessons: many }, [], "p").lessons).toHaveLength(MAX_OUTLINE_LESSONS);
+    const many = Array.from({ length: 50 }, (_, i) => ({ title: `L${i}`, objective: "o", skills: ["s"], bookSectionIndex: null, estimatedMinutes: 8 }));
+    expect(validateOutline({ subject: "s", title: "t", lessons: many }, [], "p", 5).lessons).toHaveLength(MAX_OUTLINE_LESSONS);
   });
 
   it("throws a safe 502 when nothing usable is left", () => {
-    expect(() => validateOutline({ subject: "", title: "", lessons: [] }, [], "p")).toThrow(
+    expect(() => validateOutline({ subject: "", title: "", lessons: [] }, [], "p", 5)).toThrow(
       expect.objectContaining({ status: 502 }),
     );
   });
@@ -136,6 +137,7 @@ describe("POST /api/curricula", () => {
           objective: "o",
           skills: ["Not A Slug", "ok-slug"],
           bookSectionIndex: 99,
+          estimatedMinutes: i === 0 ? 999 : Number.NaN,
         })),
       },
     };
@@ -143,6 +145,9 @@ describe("POST /api/curricula", () => {
     expect(res.status).toBe(201);
     expect(res.body.curriculum.lessons).toHaveLength(MAX_OUTLINE_LESSONS);
     expect(res.body.curriculum.lessons[0].skills).toEqual(["not-a-slug", "ok-slug"]);
+    // 999 is clamped; NaN falls back to the plan's average (here only 999 → clamped 60).
+    expect(res.body.curriculum.lessons[0].estimatedMinutes).toBe(60);
+    expect(res.body.curriculum.lessons.every((l: { estimatedMinutes: number }) => l.estimatedMinutes >= 1 && l.estimatedMinutes <= 60)).toBe(true);
 
     const original = console.error;
     console.error = () => {};

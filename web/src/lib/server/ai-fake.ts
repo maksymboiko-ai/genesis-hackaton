@@ -103,6 +103,7 @@ export const fakeAi: AiService = {
           objective: step.objective,
           skills: [i === 0 && input.knownSkills[0] ? input.knownSkills[0] : `${topic}-${slugify(step.title)}`],
           bookSectionIndex: sections.length ? sections[i % sections.length].index : null,
+          estimatedMinutes: 6 + i * 2,
         })),
       },
     };
@@ -154,6 +155,7 @@ export const fakeAi: AiService = {
             objective: "Harder problems for a learner who is ahead.",
             skills: ["advanced-problems"],
             reason: "You got nearly everything right, so here is something harder.",
+            estimatedMinutes: 12,
           },
         ],
       };
@@ -165,6 +167,7 @@ export const fakeAi: AiService = {
       objective: `Rebuild ${label(skill)} from the ground up.`,
       skills: [skill],
       reason: `Your answers on ${label(skill)} went different ways, so we start from the idea underneath it.`,
+      estimatedMinutes: 6,
     }));
     return {
       diagnosis: {

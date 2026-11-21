@@ -51,10 +51,16 @@ export const LessonOutline = z.object({
 });
 export type LessonOutline = z.infer<typeof LessonOutline>;
 
+// Added to every lesson the model plans (outline and replan): whole minutes
+// the lesson takes, reading and quiz together, at the learner's grade.
+// Checked in code: rounded and kept within 3 to 30.
+const Timing = { estimatedMinutes: z.number() };
+
 // A lesson in a new curriculum. bookSectionIndex is the BookSection the
 // lesson is taught from; null when there is no book or no section fits.
 export const OutlineLesson = LessonOutline.extend({
   bookSectionIndex: z.number().nullable(),
+  ...Timing,
 });
 export type OutlineLesson = z.infer<typeof OutlineLesson>;
 
@@ -76,6 +82,7 @@ export const OutlineDraft = z.object({
     LessonOutline.extend({
       // -1 when the lesson is not taught from a book section.
       bookSectionIndex: z.number(),
+      ...Timing,
     }),
   ),
 });
@@ -128,6 +135,7 @@ export type LessonOutput = z.infer<typeof LessonOutput>;
 // lesson is in the plan; the backend stores it in lesson.reason.
 export const PlannedLesson = LessonOutline.extend({
   reason: z.string(),
+  ...Timing,
 });
 export type PlannedLesson = z.infer<typeof PlannedLesson>;
 

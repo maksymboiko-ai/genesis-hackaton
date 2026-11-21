@@ -61,6 +61,7 @@ describe("replan placement (pure)", () => {
     skills: ["s"],
     retryOfLessonId: null,
     reason: null,
+    estimatedMinutes: 9,
     contentStatus: "ready",
     content: null,
     completedAt: null,
@@ -82,7 +83,8 @@ describe("replan placement (pure)", () => {
         { lessonId: "l1", score: 0.9 },
         { lessonId: "l0", score: 0.2 },
       ],
-      proposed: [{ title: "Review", objective: "r", skills: ["Missing Skill"], reason: " Because the sign slipped. " }],
+      gradeLevel: 7,
+      proposed: [{ title: "Review", objective: "r", skills: ["Missing Skill"], reason: " Because the sign slipped. ", estimatedMinutes: 7.4 }],
     });
     expect(plan.insertAt).toBe(3);
     expect(plan.rows.map((r) => [r.kind, r.title, r.retryOfLessonId, r.bookSectionIndex])).toEqual([
@@ -93,11 +95,12 @@ describe("replan placement (pure)", () => {
     expect(plan.rows[0].skills).toEqual(["missing-skill"]);
     expect(plan.rows[0].reason).toBe("Because the sign slipped.");
     expect(plan.rows[1].reason).toBe(RETRY_REASON);
+    expect(plan.rows.map((r) => r.estimatedMinutes)).toEqual([7, 9, 9]);
   });
 
   it("excelling: extensions appended at the end, capped", () => {
-    const proposed = Array.from({ length: 10 }, (_, i) => ({ title: `E${i}`, objective: "e", skills: ["x"], reason: "r" }));
-    const plan = planReplan({ trigger: "excelling", lessons, windowAttempts: [], proposed });
+    const proposed = Array.from({ length: 10 }, (_, i) => ({ title: `E${i}`, objective: "e", skills: ["x"], reason: "r", estimatedMinutes: 10 }));
+    const plan = planReplan({ trigger: "excelling", lessons, windowAttempts: [], proposed, gradeLevel: 7 });
     expect(plan.insertAt).toBe(5);
     expect(plan.rows).toHaveLength(MAX_REPLAN_LESSONS);
     expect(plan.rows.every((r) => r.kind === "extension")).toBe(true);
@@ -105,7 +108,7 @@ describe("replan placement (pure)", () => {
 
   it("all lessons done: struggling inserts at the end", () => {
     const all = lessons.map((l) => ({ ...l, ...done }));
-    expect(planReplan({ trigger: "struggling", lessons: all, windowAttempts: [], proposed: [] }).insertAt).toBe(5);
+    expect(planReplan({ trigger: "struggling", lessons: all, windowAttempts: [], proposed: [], gradeLevel: 7 }).insertAt).toBe(5);
   });
 });
 
@@ -210,7 +213,7 @@ describe("self-healing end to end", () => {
     const original = fakeAi.replan;
     fakeAi.replan = async () => ({
       diagnosis: { summary: "s", childMessage: "c", mistakes: [], missingSkills: ["Bad Slug"] },
-      newLessons: Array.from({ length: 20 }, (_, i) => ({ title: `R${i}`, objective: "r", skills: ["NOT OK"], reason: "x".repeat(500) })),
+      newLessons: Array.from({ length: 20 }, (_, i) => ({ title: `R${i}`, objective: "r", skills: ["NOT OK"], reason: "x".repeat(500), estimatedMinutes: -3 })),
     });
     try {
       for (const p of [0, 1, 2]) await doLesson(curriculum.id, p, 0);

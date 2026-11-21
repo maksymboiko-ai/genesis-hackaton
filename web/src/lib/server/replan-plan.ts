@@ -10,6 +10,7 @@ import {
 import { sectionFor } from "./retrieval";
 import type { LessonRow, NewLesson } from "./store/types";
 import { cleanText, toSkillSlug } from "./text";
+import { cleanMinutes, fallbackMinutes } from "./timing";
 
 // Pure replan logic: when to replan and where new lessons go.
 
@@ -41,14 +42,15 @@ export function cleanDiagnosis(d: ReplanDiagnosis): ReplanDiagnosis {
   };
 }
 
-function cleanOutline(l: PlannedLesson, kind: "remedial" | "extension"): NewLesson | null {
+function cleanOutline(l: PlannedLesson, kind: "remedial" | "extension", fallback: number): NewLesson | null {
   const title = cleanText(l.title, 150);
   const objective = cleanText(l.objective, 500);
   if (!title || !objective) return null;
   const skills = [...new Set(l.skills.map(toSkillSlug).filter((s): s is string => s !== null))].slice(0, 5);
   if (skills.length === 0) skills.push(toSkillSlug(title) ?? "general");
   const reason = cleanText(l.reason, MAX_REASON_CHARS) || null;
-  return { kind, title, objective, skills, retryOfLessonId: null, bookSectionIndex: null, reason };
+  const estimatedMinutes = cleanMinutes(l.estimatedMinutes, fallback);
+  return { kind, title, objective, skills, retryOfLessonId: null, bookSectionIndex: null, reason, estimatedMinutes };
 }
 
 /**
@@ -62,20 +64,22 @@ export function planReplan(input: {
   lessons: LessonRow[];
   windowAttempts: { lessonId: string; score: number }[];
   proposed: PlannedLesson[];
+  gradeLevel: number;
 }): { insertAt: number; rows: NewLesson[] } {
   const ordered = [...input.lessons].sort((a, b) => a.position - b.position);
+  const fallback = fallbackMinutes(input.proposed.map((l) => l.estimatedMinutes), input.gradeLevel);
   const end = ordered.length ? ordered[ordered.length - 1].position + 1 : 0;
 
   if (input.trigger === "excelling") {
     const rows = input.proposed
-      .map((l) => cleanOutline(l, "extension"))
+      .map((l) => cleanOutline(l, "extension", fallback))
       .filter((l): l is NewLesson => l !== null)
       .slice(0, MAX_REPLAN_LESSONS);
     return { insertAt: end, rows };
   }
 
   const remedial = input.proposed
-    .map((l) => cleanOutline(l, "remedial"))
+    .map((l) => cleanOutline(l, "remedial", fallback))
     .filter((l): l is NewLesson => l !== null)
     .slice(0, MAX_REPLAN_LESSONS);
 
@@ -90,6 +94,8 @@ export function planReplan(input: {
       retryOfLessonId: l.id,
       bookSectionIndex: sectionFor(l, ordered),
       reason: RETRY_REASON,
+      // Until the retry is written: as long as the lesson it repeats.
+      estimatedMinutes: l.estimatedMinutes,
     }));
 
   const next = ordered.find((l) => !l.completedAt);

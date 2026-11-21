@@ -56,6 +56,7 @@ export type LessonRow = {
   retryOfLessonId: string | null;
   // Why a replan added the lesson, to the child; null for core lessons.
   reason: string | null;
+  estimatedMinutes: number;
   contentStatus: ContentStatus;
   // LessonContent (jsonb), null until ready.
   content: unknown;
@@ -85,6 +86,7 @@ export type NewLesson = {
   retryOfLessonId: string | null;
   bookSectionIndex: number | null;
   reason: string | null;
+  estimatedMinutes: number;
 };
 
 export type AttemptRow = {
@@ -151,8 +153,8 @@ export interface Store {
    * the caller that claimed it.
    */
   claimLesson(id: string, staleBeforeIso: string, retryBeforeIso: string): Promise<boolean>;
-  /** Stores content and marks ready; only from 'generating'. */
-  saveLessonContent(id: string, content: unknown): Promise<void>;
+  /** Stores content and its computed length, marks ready; only from 'generating'. */
+  saveLessonContent(id: string, content: unknown, estimatedMinutes: number): Promise<void>;
   /** Marks failed; only from 'generating'. */
   failLesson(id: string): Promise<void>;
 

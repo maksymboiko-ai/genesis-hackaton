@@ -27,6 +27,7 @@ export function toLessonSummary(row: LessonRow): LessonSummary {
     skills: validSkills(row.skills),
     retryOfLessonId: row.retryOfLessonId,
     reason: row.reason,
+    estimatedMinutes: row.estimatedMinutes,
     contentStatus: row.contentStatus,
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     lastScore: row.lastScore,

@@ -98,6 +98,9 @@ export const LessonSummary = z.object({
   // Why the lesson is in the plan, in one sentence addressed to the child.
   // Null for core lessons; set for lessons a replan added.
   reason: z.string().nullable(),
+  // Expected minutes, reading and quiz together. The model's estimate from
+  // the outline until the content is ready, then computed from the content.
+  estimatedMinutes: z.number().int().min(1).max(60),
   contentStatus: ContentStatus,
   completedAt: z.string().datetime().nullable(),
   lastScore: z.number().min(0).max(1).nullable(),

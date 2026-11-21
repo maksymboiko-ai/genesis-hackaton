@@ -122,7 +122,7 @@ function newLesson(
   curriculumId: string,
   position: number,
   kind: LessonKind,
-  outline: { title: string; objective: string; skills: string[] },
+  outline: { title: string; objective: string; skills: string[]; estimatedMinutes?: number },
   retryOfLessonId: string | null = null,
   reason: string | null = null,
 ): StoredLesson {
@@ -136,6 +136,8 @@ function newLesson(
     skills: outline.skills,
     retryOfLessonId,
     reason,
+    // Mock only: the real estimate comes from the outline, then the content.
+    estimatedMinutes: outline.estimatedMinutes ?? 5 + (outline.title.length % 6),
     contentStatus: 'pending',
     completedAt: null,
     lastScore: null,

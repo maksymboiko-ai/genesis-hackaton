@@ -174,6 +174,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F10 | security baseline | M0–M7 | ✅ | Zod at every edge, body caps, generic errors, per-route rate limits, daily AI budget, `server-only`, security headers, RLS + revoked function access for Supabase client roles (`0005`), `npm audit`: 0 vulnerabilities |
 | F11 | claims, failure reset, stuck recovery | M3, M5 | ✅ | stale `generating`/`running` reclaimed after 3 min; `failed` lesson retried on open after a 60 s cooldown; failed replan releases to idle |
 | F13 | explicit lesson retry ("Try again") | M8 | ✅ | `POST /api/lessons/:id/retry` skips the 60 s cooldown; ready/generating lessons returned as they are; 5 burst, 2/min per IP; client method + mock route added |
+| F14 | lesson length (`estimatedMinutes`) | M8 | ✅ | model estimate per planned lesson (outline + replan prompts, 3–30 checked in `lib/ai`), bounded again in the backend with a computed fallback; replaced by a value computed from the content (reading speed by grade + 45 s per question) once ready; migration `0006` |
 | F12 | fake/real AiService switch | M0, M7 | ✅ | `AI_MODE=real` (default) calls `lib/ai` (merged from `feature/ai-functions`); `fake` for tests and keyless local runs; key checked only when a model is called |
 
 ### Modules

@@ -1,4 +1,4 @@
--- Tests for 0004_backend_functions.sql. Run on a scratch database that has
+-- Tests for 0004_backend_functions.sql (as replaced by 0006_estimated_minutes.sql). Run on a scratch database that has
 -- all migrations applied (never on the shared one):
 --   psql "$SCRATCH_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/0004_backend_functions.sql
 -- Every block raises on failure; everything runs in a transaction that is
@@ -22,9 +22,9 @@ begin
   insert into t_ids values ('child', v_child);
 
   v_cur := create_curriculum(v_child, null, 'fractions', 'Math', 'Fractions',
-    '[{"title":"A","objective":"a","skills":["s-one","s-two"],"book_section_index":2},
-      {"title":"B","objective":"b","skills":[]},
-      {"title":"C","objective":"c","skills":["s-three"],"book_section_index":null}]'::jsonb);
+    '[{"title":"A","objective":"a","skills":["s-one","s-two"],"book_section_index":2,"estimated_minutes":7},
+      {"title":"B","objective":"b","skills":[],"estimated_minutes":8},
+      {"title":"C","objective":"c","skills":["s-three"],"book_section_index":null,"estimated_minutes":9}]'::jsonb);
   insert into t_ids values ('curriculum', v_cur);
 
   select count(*), array_agg(position order by position) into v_n, v_positions
@@ -52,7 +52,7 @@ begin
 
   -- A bad lesson rolls back the curriculum insert too (atomicity).
   begin
-    perform create_curriculum(v_child, null, 'y', 'Math', 'Y', '[{"title":null,"objective":"o"}]'::jsonb);
+    perform create_curriculum(v_child, null, 'y', 'Math', 'Y', '[{"title":null,"objective":"o","estimated_minutes":5}]'::jsonb);
     raise exception 'create_curriculum: accepted a null title';
   exception when not_null_violation then null;
   end;
@@ -177,8 +177,8 @@ begin
   select id into v_first from lesson where curriculum_id = v_cur and position = 0;
   v_ids := apply_replan(v_cur, 2,
     jsonb_build_array(
-      jsonb_build_object('kind','remedial','title','R','objective','r','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',null,'book_section_index',null),
-      jsonb_build_object('kind','retry','title','A','objective','a','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',v_first,'book_section_index',2,'reason','Second try')),
+      jsonb_build_object('kind','remedial','title','R','objective','r','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',null,'book_section_index',null,'estimated_minutes',6),
+      jsonb_build_object('kind','retry','title','A','objective','a','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',v_first,'book_section_index',2,'reason','Second try','estimated_minutes',9)),
     'struggling', '{"summary":"s","mistakes":[],"missingSkills":["s-one"]}'::jsonb);
 
   if array_length(v_ids, 1) <> 2 then
@@ -207,7 +207,7 @@ begin
 
   -- Append at the end (excelling).
   v_ids := apply_replan(v_cur, 5,
-    jsonb_build_array(jsonb_build_object('kind','extension','title','E','objective','e','skills',jsonb_build_array('s-x'))),
+    jsonb_build_array(jsonb_build_object('kind','extension','title','E','objective','e','skills',jsonb_build_array('s-x'),'estimated_minutes',12)),
     'excelling', '{"summary":"s","mistakes":[],"missingSkills":[]}'::jsonb);
   select array_agg(title order by position) into v_titles from lesson where curriculum_id = v_cur;
   if v_titles <> array['A','B','R','A','C','E'] then
@@ -218,7 +218,7 @@ begin
   perform claim_replan(v_cur, now());
   begin
     perform apply_replan(v_cur, 0,
-      jsonb_build_array(jsonb_build_object('kind','bogus','title','X','objective','x')),
+      jsonb_build_array(jsonb_build_object('kind','bogus','title','X','objective','x','estimated_minutes',5)),
       'struggling', '{}'::jsonb);
     raise exception 'apply_replan: accepted a bad kind';
   exception when check_violation then null;

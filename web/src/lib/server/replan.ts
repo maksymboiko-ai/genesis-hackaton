@@ -82,7 +82,13 @@ export async function runReplan(curriculumId: string, trigger: ReplanTrigger): P
       knownSkills: knownSkillsOf(learner),
     });
 
-    const plan = planReplan({ trigger, lessons, windowAttempts: window, proposed: result.newLessons });
+    const plan = planReplan({
+      trigger,
+      lessons,
+      windowAttempts: window,
+      proposed: result.newLessons,
+      gradeLevel: learner.gradeLevel,
+    });
     const ids = await store.applyReplan({
       curriculumId,
       insertAt: plan.insertAt,

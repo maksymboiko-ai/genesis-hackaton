@@ -180,6 +180,7 @@ describe("retrieval", () => {
     skills: ["fractions"],
     retryOfLessonId: null,
     reason: null,
+    estimatedMinutes: 8,
     contentStatus: "generating",
     content: null,
     completedAt: null,

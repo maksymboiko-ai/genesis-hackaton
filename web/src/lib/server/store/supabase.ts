@@ -70,6 +70,7 @@ type LessonDb = {
   skills: string[];
   retry_of_lesson_id: string | null;
   reason: string | null;
+  estimated_minutes: number;
   content_status: LessonRow["contentStatus"];
   content: unknown;
   completed_at: string | null;
@@ -79,7 +80,7 @@ type LessonDb = {
   created_at: string;
 };
 const LESSON_COLUMNS =
-  "id, curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, reason, content_status, content, completed_at, last_score, book_section_index, generation_started_at, created_at";
+  "id, curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, reason, estimated_minutes, content_status, content, completed_at, last_score, book_section_index, generation_started_at, created_at";
 const toLesson = (r: LessonDb): LessonRow => ({
   id: r.id,
   curriculumId: r.curriculum_id,
@@ -90,6 +91,7 @@ const toLesson = (r: LessonDb): LessonRow => ({
   skills: r.skills,
   retryOfLessonId: r.retry_of_lesson_id,
   reason: r.reason,
+  estimatedMinutes: r.estimated_minutes,
   contentStatus: r.content_status,
   content: r.content,
   completedAt: r.completed_at,
@@ -125,6 +127,7 @@ export const lessonJson = (l: NewLesson) => ({
   retry_of_lesson_id: l.retryOfLessonId,
   book_section_index: l.bookSectionIndex,
   reason: l.reason,
+  estimated_minutes: l.estimatedMinutes,
 });
 
 type AttemptDb = { id: string; lesson_id: string; score: number; results: unknown; created_at: string };
@@ -329,10 +332,10 @@ export class SupabaseStore implements Store {
     return data === true;
   }
 
-  async saveLessonContent(id: string, content: unknown) {
+  async saveLessonContent(id: string, content: unknown, estimatedMinutes: number) {
     const { error } = await this.db
       .from("lesson")
-      .update({ content, content_status: "ready" })
+      .update({ content, estimated_minutes: estimatedMinutes, content_status: "ready" })
       .eq("id", id)
       .eq("content_status", "generating");
     check(error, "save lesson content");
