@@ -8,7 +8,8 @@ export const Id = z.string().uuid();
 // Lessons, quiz questions and mastery rows all refer to skills by this slug.
 export const SkillSlug = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
 
-// core      - part of the original outline
+// core      - part of the plan: the original outline, or lessons added when
+//             the child finished the plan and asked for more
 // remedial  - inserted by a replan to teach a missing skill
 // retry     - a failed lesson scheduled again after its remedial lessons
 // extension - appended by a replan because the child is excelling
@@ -44,6 +45,13 @@ export const MASTERY_START = 0.5;
 // When a goal is too vague to plan, the app asks at most this many questions,
 // once, before building the curriculum.
 export const MAX_CLARIFYING_QUESTIONS = 3;
+
+// A new plan has as many lessons as its topic needs, up to this many.
+export const MAX_OUTLINE_LESSONS = 30;
+// "Keep going" on a finished plan adds up to this many lessons at a time,
+// until the plan holds MAX_CURRICULUM_LESSONS.
+export const MAX_EXTEND_LESSONS = 8;
+export const MAX_CURRICULUM_LESSONS = 150;
 
 // A clarifying question the app asked and the answer it got.
 export const Clarification = z.object({
@@ -123,12 +131,144 @@ export const Question = z.object({
 });
 export type Question= z.infer<typeof Question>;
 
+// --- Interactive lesson blocks ----------------------------------------------
+// A lesson body is Markdown plus blocks: graphs, number lines, quick checks
+// and step-by-step examples. The model fills in a block's data; our own
+// components draw it (ADR 0002: no model-written HTML or SVG). A block sits
+// where the Markdown has a line holding only its id in double square
+// brackets, e.g. [[graph-1]].
+
+export const MAX_LESSON_BLOCKS = 10;
+
+export const BlockId = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(40);
+
+// A number or a formula over a graph's parameters, e.g. "3", "2*m + b",
+// "sqrt(a^2 + b^2)". Parsed by lib/expr.ts, never evaluated as code.
+export const Expr = z.string().min(1).max(120);
+
+// A value the child changes with a slider (or by dragging a point); every
+// expression of the graph is recomputed from the current values.
+export const GraphParameter = z.object({
+  // Short lowercase name used in expressions, e.g. "m". Not "x" or "y".
+  name: z.string().regex(/^[a-z][a-z0-9]{0,7}$/),
+  // What the slider is called, e.g. "Slope".
+  label: z.string(),
+  min: z.number(),
+  max: z.number(),
+  step: z.number().positive(),
+  // Where the slider starts.
+  value: z.number(),
+});
+export type GraphParameter = z.infer<typeof GraphParameter>;
+
+// primary: the thing the lesson is about. secondary: what it is compared
+// with. muted: helper lines.
+export const GraphTone = z.enum(["primary", "secondary", "muted"]);
+export type GraphTone = z.infer<typeof GraphTone>;
+
+const Drawn = { label: z.string(), tone: GraphTone };
+const TwoPoints = { x1: Expr, y1: Expr, x2: Expr, y2: Expr, dashed: z.boolean(), ...Drawn };
+
+export const GraphElement = z.discriminatedUnion("kind", [
+  // A point whose x and y are each just a parameter name can be dragged.
+  z.object({ kind: z.literal("point"), x: Expr, y: Expr, ...Drawn }),
+  z.object({ kind: z.literal("segment"), ...TwoPoints }),
+  // The whole line through the two points.
+  z.object({ kind: z.literal("line"), ...TwoPoints }),
+  // An arrow from the first point to the second.
+  z.object({ kind: z.literal("vector"), ...TwoPoints }),
+  z.object({ kind: z.literal("circle"), cx: Expr, cy: Expr, r: Expr, dashed: z.boolean(), ...Drawn }),
+  // y = expr, where expr may also use x.
+  z.object({ kind: z.literal("function"), expr: Expr, dashed: z.boolean(), ...Drawn }),
+  z.object({
+    kind: z.literal("polygon"),
+    points: z.array(z.object({ x: Expr, y: Expr })).min(3).max(8),
+    ...Drawn,
+  }),
+]);
+export type GraphElement = z.infer<typeof GraphElement>;
+
+// A coordinate plane.
+export const GraphBlock = z.object({
+  type: z.literal("graph"),
+  id: BlockId,
+  title: z.string(),
+  // What to notice or try, one sentence; "" for none.
+  caption: z.string(),
+  xMin: z.number(),
+  xMax: z.number(),
+  yMin: z.number(),
+  yMax: z.number(),
+  parameters: z.array(GraphParameter).max(4),
+  elements: z.array(GraphElement).min(1).max(12),
+  // Live values shown under the graph, e.g. { label: "Slope", expr: "(d - b) / (c - a)" }.
+  readouts: z.array(z.object({ label: z.string().min(1), expr: Expr })).max(4),
+});
+export type GraphBlock = z.infer<typeof GraphBlock>;
+
+export const NumberLineBlock = z.object({
+  type: z.literal("number_line"),
+  id: BlockId,
+  title: z.string(),
+  caption: z.string(),
+  min: z.number(),
+  max: z.number(),
+  // Distance between labelled ticks.
+  step: z.number().positive(),
+  // open: drawn hollow, for a value that is not included (x < 3).
+  points: z.array(z.object({ value: z.number(), label: z.string(), open: z.boolean() })).max(8),
+  // Shaded stretches; null runs off that end of the line (x > 2).
+  ranges: z.array(z.object({ from: z.number().nullable(), to: z.number().nullable() })).max(3),
+});
+export type NumberLineBlock = z.infer<typeof NumberLineBlock>;
+
+// A quick question inside the lesson. Not graded and not stored: the child
+// gets the feedback at once, so the answer is sent to the browser.
+export const CheckBlock = z.object({
+  type: z.literal("check"),
+  id: BlockId,
+  prompt: z.string().min(1),
+  choices: z.array(z.string().min(1)).min(2).max(CHOICES_PER_QUESTION),
+  answerIndex: z.number().int().min(0).max(CHOICES_PER_QUESTION - 1),
+  // What to tell a child who picked each choice, in the order of choices.
+  feedback: z.array(z.string().min(1)).min(2).max(CHOICES_PER_QUESTION),
+});
+export type CheckBlock = z.infer<typeof CheckBlock>;
+
+// A worked example the child reveals one step at a time.
+export const StepsBlock = z.object({
+  type: z.literal("steps"),
+  id: BlockId,
+  // The problem being solved.
+  title: z.string().min(1),
+  steps: z
+    .array(
+      z.object({
+        // What is done in this step and why; inline Markdown.
+        text: z.string().min(1),
+        // The line of working the step ends with, or "" for none.
+        math: z.string(),
+      }),
+    )
+    .min(2)
+    .max(10),
+});
+export type StepsBlock = z.infer<typeof StepsBlock>;
+
+export const LessonBlock = z.discriminatedUnion("type", [GraphBlock, NumberLineBlock, CheckBlock, StepsBlock]);
+export type LessonBlock = z.infer<typeof LessonBlock>;
+
 // Stored in lesson.content once contentStatus is "ready".
 export const LessonContent = z.object({
+  // May contain block placeholders: a line holding only [[block-id]].
   bodyMarkdown: z.string(),
+  // Lessons written before blocks existed have none.
+  blocks: z.array(LessonBlock).max(MAX_LESSON_BLOCKS).default([]),
   questions: z.array(Question).min(1),
 });
 export type LessonContent = z.infer<typeof LessonContent>;
+// Content as it may be stored: `blocks` can be missing in older lessons.
+export type LessonContentInput = z.input<typeof LessonContent>;
 
 export const QuestionResult = z.object({
   questionId: z.string(),

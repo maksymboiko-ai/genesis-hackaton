@@ -5,6 +5,7 @@ import {
   CreateBookResponse,
   CreateChildResponse,
   CreateCurriculumResponse,
+  ExtendCurriculumResponse,
   GetBookResponse,
   GetCurriculumResponse,
   GetLessonResponse,
@@ -96,6 +97,9 @@ export const api = {
     request(CreateCurriculumResponse, '/curricula', post(body)),
   getCurriculum: (curriculumId: string) =>
     request(GetCurriculumResponse, `/curricula/${curriculumId}`),
+  // "Keep going" on a finished plan: plans and appends the next lessons.
+  extendCurriculum: (curriculumId: string) =>
+    request(ExtendCurriculumResponse, `/curricula/${curriculumId}/extend`, { method: 'POST' }),
 
   getLesson: (lessonId: string) => request(GetLessonResponse, `/lessons/${lessonId}`),
   // "Try again" on a failed lesson.

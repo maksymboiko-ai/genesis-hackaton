@@ -4,10 +4,12 @@ import { Mascot } from '@/components/Mascot'
 import { StreakMoment } from '@/features/streak/StreakMoment'
 import { Check, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { KindTag } from '@/components/KindTag'
 import type { PublicQuestion, SubmitAttemptResponse } from '@/contracts/api'
 import type { Curriculum, QuestionResult } from '@/contracts/domain'
+import { KeepGoing } from '@/features/curriculum/KeepGoing'
 import { isMathy, shortPrompt } from './text'
 
 type Props = {
@@ -104,6 +106,8 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
     (result.nextLessonId ? { id: result.nextLessonId, title: '', kind: 'core' as const, position: -1 } : null)
   const nextNumber = curriculum && next ? curriculum.lessons.findIndex((lesson) => lesson.id === next.id) + 1 : 0
   const planHref = `/app/curricula/${curriculumId}`
+  // Only a loaded plan with nothing left counts; an unknown plan does not.
+  const finished = curriculum !== null && curriculum.lessons.every((lesson) => lesson.completedAt !== null)
   const good = result.replanTriggered === 'excelling'
 
   return (
@@ -176,6 +180,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
               nextNumber={nextNumber}
               adjusting={adjusting}
               planHref={planHref}
+              curriculumId={finished ? curriculumId : undefined}
             />
             <button type="button" className="btn q wide" style={{ height: 44 }} onClick={onRetake}>
               Try these questions again
@@ -208,7 +213,14 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
       </div>
 
       <div className="lesson-foot lg:hidden!">
-        <NextCard next={next} nextNumber={nextNumber} adjusting={adjusting} planHref={planHref} compact />
+        <NextCard
+          next={next}
+          nextNumber={nextNumber}
+          adjusting={adjusting}
+          planHref={planHref}
+          curriculumId={finished ? curriculumId : undefined}
+          compact
+        />
       </div>
       <div className="h-36 lg:hidden" aria-hidden="true" />
     </div>
@@ -220,14 +232,18 @@ function NextCard({
   nextNumber,
   adjusting,
   planHref,
+  curriculumId,
   compact,
 }: {
   next: { id: string; title: string; kind: 'core' | 'remedial' | 'retry' | 'extension' } | null
   nextNumber: number
   adjusting: boolean
   planHref: string
+  // Set once the plan is known to be finished: offers "Keep going".
+  curriculumId?: string
   compact?: boolean
 }) {
+  const router = useRouter()
   if (adjusting) {
     return (
       <button type="button" className="btn wide" disabled>
@@ -237,10 +253,24 @@ function NextCard({
   }
 
   if (!next) {
+    // The plan is finished: offer more lessons, then go straight to the first.
     return (
-      <Link href={planHref} className="btn wide">
-        Back to the plan
-      </Link>
+      <>
+        {curriculumId && (
+          <KeepGoing
+            curriculumId={curriculumId}
+            onExtended={(curriculum) => {
+              const first = [...curriculum.lessons]
+                .sort((a, b) => a.position - b.position)
+                .find((lesson) => !lesson.completedAt)
+              router.push(first ? `/app/lessons/${first.id}` : planHref)
+            }}
+          />
+        )}
+        <Link href={planHref} className="btn q wide" style={{ height: 44 }}>
+          Back to the plan
+        </Link>
+      </>
     )
   }
 

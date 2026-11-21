@@ -7,6 +7,8 @@ export type GenerationTask = Exclude<LlmCallRecord["task"], "embed">;
 
 export const DEFAULT_MODELS: Record<GenerationTask, string> = {
   outline: "openai/gpt-6-luna",
+  // The same job as the outline, from a finished plan instead of a goal.
+  extend: "openai/gpt-6-luna",
   lesson: "google/gemini-3.5-flash-lite",
   replan: "google/gemini-3.8-flash",
   learner_notes: "openai/gpt-6-luna",

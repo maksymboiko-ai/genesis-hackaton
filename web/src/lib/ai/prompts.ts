@@ -2,6 +2,7 @@
 // for one task; the output shape is enforced separately by the JSON schema.
 import type {
   AttemptFeedbackInput,
+  ExtendOutlineInput,
   GenerateLessonInput,
   GenerateOutlineInput,
   LessonAttemptSummary,
@@ -11,6 +12,7 @@ import type {
 import {
   CHOICES_PER_QUESTION,
   MAX_CLARIFYING_QUESTIONS,
+  MAX_OUTLINE_LESSONS,
   type BookSection,
   type LearnerProfile,
 } from "@/contracts/domain";
@@ -22,7 +24,15 @@ const STYLE_RULE =
   "Write in American English and follow US school conventions: grade levels, spelling, units and math notation.";
 
 const ESTIMATE_RULE =
-  "Give every lesson estimatedMinutes: the whole minutes this child needs to read it and answer its quiz, from 3 to 30. A lesson is 250 to 450 words plus 4 or 5 questions, so typically 6 to 10 minutes for grades 1 to 4 and 8 to 15 above; more for dense topics, less for short reviews.";
+  "Give every lesson estimatedMinutes: the whole minutes this child needs to work through it and answer its quiz, from 5 to 45. A lesson is a full explanation with worked examples, things to try and 5 to 7 quiz questions, so typically 10 to 15 minutes for grades 1 to 4 and 15 to 25 above; more for dense topics, less for short reviews.";
+
+// How long a lesson is at each grade: words in the body, questions in the quiz.
+export function lessonSize(gradeLevel: number): { minWords: number; maxWords: number; questions: number } {
+  if (gradeLevel <= 2) return { minWords: 350, maxWords: 550, questions: 5 };
+  if (gradeLevel <= 4) return { minWords: 500, maxWords: 750, questions: 5 };
+  if (gradeLevel <= 8) return { minWords: 700, maxWords: 1000, questions: 7 };
+  return { minWords: 800, maxWords: 1200, questions: 7 };
+}
 
 const SKILL_RULE =
   'A skill is a lowercase kebab-case slug naming one narrow, testable ability, e.g. "solving-linear-equations". If a known skill fits, reuse its slug exactly instead of inventing a near-duplicate.';
@@ -111,13 +121,14 @@ export function outlinePrompt(input: GenerateOutlineInput): Prompt {
     : `Ask only when you cannot tell which subject or topic the goal is about, so that two reasonable tutors would plan different curricula. Then return 1 to ${MAX_CLARIFYING_QUESTIONS} short questions a parent can answer in a sentence, with subject and title as "" and lessons as []. A goal that names a subject and a topic or a problem ("got a B in algebra", "fractions for 5th grade") is clear enough: return questions as [] and the outline. Never ask about the grade level or anything else already given below.`;
 
   const hasBook = input.bookSections.length > 0;
+  const lengthRule = `The plan must cover the goal from its first prerequisite to confident independent use, not sample it, so its length follows the scope of the goal. One narrow skill, or the repair of one weak spot: 4 to 6 lessons. A typical school unit (fractions, linear equations, photosynthesis): 8 to 14. A broad subject or a whole course (analytic geometry, grade 7 math, US history to 1877): 18 to ${MAX_OUTLINE_LESSONS}. Before you write the lessons, list for yourself every subtopic the goal contains; give each its own lesson, two where one would be crowded, and leave none out. After every 4 to 6 lessons add one of mixed practice on what came before, and end with a lesson that applies everything together. Never more than ${MAX_OUTLINE_LESSONS} lessons.`;
   const bookRule = hasBook
-    ? "The curriculum teaches from the family's textbook, whose sections are listed in the book map. Plan 5 to 15 lessons: one lesson per section that the goal covers, in the book's order, using the book's own terms in titles and objectives. If the goal is the whole book and it has more sections than that, teach the ones that matter most at this grade. Set each lesson's bookSectionIndex to the number in brackets of the section it is taught from, or -1 for a lesson (such as a prerequisite the learner is missing) that no section covers."
-    : "Plan 5 to 8 lessons. There is no textbook, so set every lesson's bookSectionIndex to -1.";
+    ? `The curriculum teaches from the family's textbook, whose sections are listed in the book map. Plan one lesson per section that the goal covers, in the book's order, using the book's own terms in titles and objectives; that is the plan's length, up to ${MAX_OUTLINE_LESSONS} lessons. If the goal covers more sections than that, teach the ones that matter most at this grade. Set each lesson's bookSectionIndex to the number in brackets of the section it is taught from, or -1 for a lesson (such as a prerequisite the learner is missing) that no section covers.`
+    : `${lengthRule} There is no textbook, so set every lesson's bookSectionIndex to -1.`;
 
   return {
     system: join([
-      "You design personal curricula for school children. From a goal stated by a parent or child you plan an ordered list of short lessons.",
+      "You design personal curricula for school children. From a goal stated by a parent or child you plan an ordered list of lessons.",
       "Each lesson has a title, a one-sentence objective saying what the child will be able to do, and the 1 to 3 skills it teaches. Order the lessons so each builds on the ones before it.",
       ESTIMATE_RULE,
       bookRule,
@@ -144,6 +155,47 @@ export function outlinePrompt(input: GenerateOutlineInput): Prompt {
   };
 }
 
+export function extendPrompt(input: ExtendOutlineInput): Prompt {
+  const hasBook = input.bookSections.length > 0;
+  const taught = new Set(input.lessons.map((lesson) => lesson.bookSectionIndex));
+  const bookRule = hasBook
+    ? "The plan teaches from the family's textbook, whose sections are listed in the book map; the ones already taught are marked. The book decides what comes next, and this rule comes before the ones above: the next lessons are the untaught sections that follow the last taught one, in the book's order, one lesson per section, using the book's own terms, even where they start a new chapter or topic. Set each lesson's bookSectionIndex to the number in brackets of its section. Only when no untaught section is left, or for a lesson no section covers (such as the return to a shaky skill), go beyond the book and use -1."
+    : "There is no textbook, so set every lesson's bookSectionIndex to -1.";
+  const plan = input.lessons.map((lesson, index) => {
+    const score = lesson.score === null ? "not attempted" : `quiz score ${Math.round(lesson.score * 100)}%`;
+    const kind = lesson.kind === "core" ? "" : ` [${lesson.kind}]`;
+    return `${index + 1}.${kind} ${lesson.title}: ${lesson.objective} (skills: ${lesson.skills.join(", ")}; ${score})`;
+  });
+
+  return {
+    system: join([
+      "You continue a personal curriculum for a school child. The child has finished every lesson of the plan and asked for more, so plan the lessons that come next.",
+      `Plan 4 to ${input.maxLessons} lessons that take the child further, the way a good tutor would go on. Read the plan so far as your starting point: never repeat a lesson it already has, and build on what it taught. If the results show a skill that is still shaky (a quiz score under 60% or mastery under 0.5), open with one lesson that returns to it from a new angle. Then move forward: the topics that naturally follow in this subject, harder kinds of problems, applications to real situations, and links to neighboring topics. Stay inside the subject of the original goal. End with a lesson that combines the new material with the old.`,
+      "Each lesson has a title, a one-sentence objective saying what the child will be able to do, and the 1 to 3 skills it teaches. Order the lessons so each builds on the ones before it.",
+      ESTIMATE_RULE,
+      bookRule,
+      "Adapt to the learner: where mastery is high, go deeper and faster; where it is low, take smaller steps. Fit the grade level.",
+      SKILL_RULE,
+      STYLE_RULE,
+    ]),
+    user: join([
+      section("Goal the plan was built for", input.prompt),
+      section("Plan", `Subject: ${input.subject}\nTitle: ${input.title}`),
+      section("The plan so far, all of it done", plan.join("\n")),
+      learnerSection(input.learner),
+      section("Known skills", list(input.knownSkills)),
+      hasBook
+        ? section(
+            "Book map",
+            input.bookSections
+              .map((s) => `[${s.index}]${taught.has(s.index) ? " (taught)" : ""} ${sectionLabel(s)}: ${s.summary}`)
+              .join("\n"),
+          )
+        : "",
+    ]),
+  };
+}
+
 const KIND_GUIDANCE: Record<GenerateLessonInput["lesson"]["kind"], string> = {
   core: "This is a regular lesson in the curriculum.",
   remedial:
@@ -154,14 +206,27 @@ const KIND_GUIDANCE: Record<GenerateLessonInput["lesson"]["kind"], string> = {
     "This is an extension lesson for a child who is excelling. Skip the basics, go deeper than the curriculum requires, and make the questions genuinely challenging.",
 };
 
+const BLOCKS_RULE = [
+  "Interactive blocks make the child do something instead of only reading. Write each block's data in its array (graphs, numberLines, checks, steppedExamples) and put it into the body with a line that holds only its id in double square brackets, such as [[check-1]], at the place where it belongs. Give every block its own lowercase id (graph-1, check-2). Place every block exactly once, and lead into it in the sentence before (\"Move the slider and watch what the line does.\").",
+  "checks: 2 or 3 per lesson. A check is one quick question placed right after the idea it tests and before the next idea starts, so the child finds out at once whether it landed. 2 to 4 choices, exactly one correct, a zero-based correctIndex, and feedback with one entry per choice, following the same rules as the quiz feedback below (name the slip and show the right way; never say wrong or incorrect). A check never repeats a quiz question.",
+  "steppedExamples: at least 1 per lesson. This is a worked example the child opens one step at a time, so put one of the lesson's worked examples here instead of writing it out in the body, and place it under its own heading. title is the problem being solved. Each of its 3 to 7 steps has text (what is done and why, one or two sentences) and math (the line of working the step ends with, or \"\" when there is none; plain text, no backticks).",
+  "graphs: a coordinate plane. Use one whenever the idea can be seen: coordinates, distance, slope, lines and curves, functions, shapes on a grid, vectors, how one quantity changes with another. A lesson in geometry, analytic geometry, functions or graphing needs at least one, and usually two. A lesson with nothing to draw (grammar, reading, history) has none: return [].",
+  "A graph has a title, a caption (one sentence on what to notice or try, or \"\"), the visible ranges xMin, xMax, yMin, yMax, and elements. Choose the ranges so everything fits with room around it; when shapes, circles or angles matter, give both axes the same length so one unit looks the same on each. Every position is an expression: text holding a number or a formula, such as \"3\", \"-1.5\", \"2*m + 1\" or \"sqrt(a^2 + b^2)\". Expressions may use + - * / ^, parentheses, sqrt, abs, sin, cos, tan, ln, log, exp, min, max, pi and e. Each element has a kind, a short label (\"A\", \"y = 2x + 1\", or \"\"), a tone (primary for what the lesson is about, secondary for what it is compared with, muted for helper lines), dashed, and the fields its kind uses; set the fields it does not use to \"\" and points to []. point: x1, y1. segment, line (runs on forever) and vector (an arrow): from x1, y1 to x2, y2. circle: center x1, y1 and radius r. function: expr, the right-hand side of y = ..., written with x, such as \"m*x + b\". polygon: points, its corners in order.",
+  "parameters make a graph interactive. Each is a slider with a name (a lowercase letter or short word, never x, y, e or pi), a label, min, max, step and a starting value. Any expression may use the parameter names, and the graph redraws as the child moves the slider. A point whose x1 and y1 are each exactly one parameter name (x1 \"a\", y1 \"b\") can be dragged by the child. Prefer an interactive graph to a still one: let the child change the slope, move the point or grow the radius, and say in the body what to try and what to watch for, calling a slider by its label, never by its parameter name. At most 4 parameters; [] for a still figure. readouts are live numbers shown under the graph, each a label and an expr, such as label \"Distance AB\" and expr \"sqrt((c - a)^2 + (d - b)^2)\"; use them for the quantity the lesson is about. A readout's expr gives one number: never an equation with = and never a pair of coordinates (show a point as two readouts, one for x and one for y). Like every expression, it may use only numbers and the parameter names; x is allowed only inside a function's expr.",
+  "numberLines: for whole numbers, negative numbers, fractions, decimals, rounding and inequalities. min, max, step (the distance between labelled ticks; at most 20 ticks), points (value, label, and open: true for a hollow dot at a value that is not included) and ranges (shaded stretches; from and to are numbers written as text, or \"\" when the range runs off that end, as in x > 2).",
+  "Every figure must agree exactly with the numbers in the text and in the worked examples. A lesson with no graph or number line still has its checks and its stepped example.",
+].join("\n");
+
 export function lessonPrompt(input: GenerateLessonInput): Prompt {
+  const size = lessonSize(input.learner.gradeLevel);
   return {
     system: join([
-      "You write one lesson for a school child, followed by a multiple-choice quiz.",
-      "The lesson body is Markdown, 250 to 450 words, written to the child at their grade level: a short hook, the idea explained step by step, at least one fully worked example, and a one-line recap. Use headings and lists. No tables, images or links.",
+      "You write one lesson for a school child: a body, interactive blocks placed inside it, and a multiple-choice quiz at the end.",
+      `The lesson body is Markdown, ${size.minWords} to ${size.maxWords} words, written to the child at their grade level. It is a complete lesson, not a summary: a short hook that says why this is worth knowing; each idea in its own section, explained step by step from what the child already knows; at least two worked examples, the second harder than the first; the typical mistake and how to avoid it; and a recap. Start each section with a ## heading. Call the section that states the main rule "Key idea", a worked example "Worked example: " followed by its problem, and the section on the typical mistake "Watch out". Use lists where they help. No tables, images, links or HTML.`,
       "Put every number sentence, equation and expression in backticks, e.g. `3x + 4 = -11`, and bold each key term once where it is introduced. End the body with one line that starts with **Remember:**.",
-      `Then write the quiz: 4 questions for grades 1 to 4, otherwise 5. Each has exactly ${CHOICES_PER_QUESTION} choices with exactly one correct, a zero-based correctIndex, choiceFeedback, and the one skill it tests, copied exactly from the lesson's skills. choiceFeedback has one entry per choice, in the same order, written to a child who picked that choice, in one or two sentences. For the correct choice, say what they did right ("5 was added, so you subtracted 5"). For a wrong choice, name the slip that leads to it and then show the right way ("You added 3 instead of subtracting it. Subtract first: ..."). Never call the child or the answer wrong, bad or silly. Cover every skill of the lesson at least once. Wrong choices should be the results of typical mistakes, not obviously silly. Vary the position of the correct choice. Every question must be answerable from the lesson body alone.`,
-      "Work each question out before writing it and make sure the choice at correctIndex really is correct.",
+      BLOCKS_RULE,
+      `Then write the quiz: ${size.questions} questions, ordered from easiest to hardest. Each has exactly ${CHOICES_PER_QUESTION} choices with exactly one correct, a zero-based correctIndex, choiceFeedback, and the one skill it tests, copied exactly from the lesson's skills. choiceFeedback has one entry per choice, in the same order, written to a child who picked that choice, in one or two sentences. For the correct choice, say what they did right ("5 was added, so you subtracted 5"). For a wrong choice, name the slip that leads to it and then show the right way ("You added 3 instead of subtracting it. Subtract first: ..."). Never call the child or the answer wrong, bad or silly. Cover every skill of the lesson at least once. Wrong choices should be the results of typical mistakes, not obviously silly. Vary the position of the correct choice. Every question must be answerable from the lesson alone, and none may need a figure to be seen.`,
+      "Work each question and each check out before writing it and make sure the choice at correctIndex really is correct.",
       "Adapt to the learner: use the notes on how this child learns, and go slower where mastery of the lesson's skills is low.",
       STYLE_RULE,
     ]),

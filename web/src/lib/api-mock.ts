@@ -191,21 +191,30 @@ function buildContent(lesson: StoredLesson): LessonContent {
   const pool = MOCK_LESSONS.filter((item) => item.subject === subjectKey(text))
   const source = bySkill ?? pool[lesson.position % pool.length]
   const skill = lesson.skills[0] ?? source.skill
-  const steps = (items: { text: string; eq?: string }[]) =>
-    items.map((item, index) => `${index + 1}. ${item.text}${item.eq ? `\n\n   \`${item.eq}\`` : ''}`).join('\n\n')
+  const extra = source.blocks ?? []
 
   return {
     bodyMarkdown: [
       source.hook,
       `## The rule\n\n${source.rule}`,
       `## ${source.pointsTitle}\n\n${source.points.map((point) => `- ${point}`).join('\n')}`,
+      ...extra.map((block) => `[[${block.id}]]`),
       source.passage && `## Read this\n\n${source.passage.map((line) => `> ${line}`).join('\n')}`,
-      `## Worked example: ${source.exampleTitle}\n\n${steps(source.example)}`,
+      `## Worked example: ${source.exampleTitle}\n\n[[steps-1]]`,
       `## Common slip\n\n${source.slip}`,
       `**Remember:** ${source.recap}`,
     ]
       .filter(Boolean)
       .join('\n\n'),
+    blocks: [
+      ...extra,
+      {
+        type: 'steps',
+        id: 'steps-1',
+        title: source.exampleTitle,
+        steps: source.example.map((item) => ({ text: item.text, math: item.eq ?? '' })),
+      },
+    ],
     questions: source.questions.map((question) => ({
       id: id(),
       prompt: question.prompt,
@@ -387,6 +396,38 @@ async function createCurriculum(db: Db, raw: unknown) {
   return { status: 'created' as const, curriculum: publicCurriculum(db, curriculum) }
 }
 
+const EXTEND_STEPS = [
+  { title: 'Mixed practice', objective: 'Use everything from the plan so far on a mixed set of problems.' },
+  { title: 'Harder problems', objective: 'Solve problems that need two ideas at once.' },
+  { title: 'Using it in real situations', objective: 'Apply what you learned to problems from everyday life.' },
+]
+
+async function extendCurriculum(db: Db, curriculumId: string) {
+  const curriculum = find(db.curricula, curriculumId, 'Curriculum')
+  const lessons = lessonsOf(db, curriculum.id)
+  if (curriculum.replanStatus === 'running') {
+    throw new MockError(409, 'conflict', 'The plan is being updated. Try again in a moment.')
+  }
+  if (lessons.some((lesson) => !lesson.completedAt)) {
+    throw new MockError(409, 'conflict', 'Finish the lessons in the plan first.')
+  }
+  await delay(OUTLINE_MS)
+
+  const last = lessons.at(-1)
+  const round = lessons.filter((lesson) => lesson.title.startsWith(EXTEND_STEPS[0].title)).length + 2
+  const added = EXTEND_STEPS.map((step, index) =>
+    newLesson(curriculum.id, lessons.length + index, 'core', {
+      title: `${step.title} ${round}`,
+      objective: step.objective,
+      skills: last?.skills.length ? last.skills : ['mixed-practice'],
+    }),
+  )
+  added[0].contentStatus = 'generating'
+  added[0].readyAt = Date.now() + LESSON_MS
+  db.lessons.push(...added)
+  return publicCurriculum(db, curriculum)
+}
+
 function auth(db: Db, action: string, body: unknown) {
   const raw = typeof body === 'string' ? JSON.parse(body) : (body ?? {})
   const email = String(raw.email ?? '').trim().toLowerCase()
@@ -436,6 +477,8 @@ function getLesson(db: Db, lessonId: string) {
     ...summary(lesson),
     content: lesson.content && {
       bodyMarkdown: lesson.content.bodyMarkdown,
+      // Lessons saved in the browser before blocks existed have none.
+      blocks: lesson.content.blocks ?? [],
       questions: lesson.content.questions.map(({ id, prompt, choices, skill }) => ({
         id,
         prompt,
@@ -554,6 +597,8 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return createCurriculum(db, body)
     case 'GET curricula/:id':
       return publicCurriculum(db, find(db.curricula, itemId, 'Curriculum'))
+    case 'POST curricula/:id/extend':
+      return extendCurriculum(db, itemId)
     case 'POST auth/:id':
     case 'GET auth/:id':
       return auth(db, itemId, body)

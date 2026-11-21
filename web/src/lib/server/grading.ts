@@ -4,7 +4,7 @@ import {
   CHOICES_PER_QUESTION,
   MASTERY_ALPHA,
   MASTERY_START,
-  type LessonContent,
+  type LessonContentInput,
   type QuestionResult,
 } from "@/contracts/domain";
 import { badRequest } from "./errors";
@@ -16,7 +16,7 @@ import { badRequest } from "./errors";
  * exactly once; unknown, duplicate or out-of-range answers are rejected.
  */
 export function gradeAttempt(
-  content: LessonContent,
+  content: LessonContentInput,
   answers: SubmitAttemptRequest["answers"],
 ): { score: number; results: QuestionResult[] } {
   const byId = new Map<string, number>();

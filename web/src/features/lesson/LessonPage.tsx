@@ -9,7 +9,7 @@ import { Button } from '@/components/Button'
 import { KindTag } from '@/components/KindTag'
 import { SubjectTile } from '@/components/SubjectTile'
 import type { GetLessonResponse, SubmitAttemptResponse } from '@/contracts/api'
-import type { Curriculum } from '@/contracts/domain'
+import type { Curriculum, LessonBlock } from '@/contracts/domain'
 import { api } from '@/lib/api'
 import { SUBJECTS, subjectKey } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
@@ -19,8 +19,8 @@ import { Results } from './Results'
 import { extractPassage, splitLabel, splitSections } from './text'
 import './lesson.css'
 
-const STAGES = ['Matching your level', 'Building a worked example', 'Writing the questions']
-const STAGE_MS = 1300
+const STAGES = ['Matching your level', 'Building the worked examples', 'Drawing the figures', 'Writing the questions']
+const STAGE_MS = 2600
 
 const isPreparing = (lesson: GetLessonResponse) =>
   lesson.contentStatus === 'pending' || lesson.contentStatus === 'generating'
@@ -64,6 +64,7 @@ function Lesson({ lessonId }: { lessonId: string }) {
   const sections = useMemo(() => splitSections(markdown, lesson?.title ?? ''), [markdown, lesson?.title])
   const passage = useMemo(() => (subject === 'read' ? extractPassage(markdown) : []), [markdown, subject])
   const questions = lesson?.content?.questions ?? []
+  const blocks = lesson?.content?.blocks ?? []
 
   async function submit() {
     if (!lesson) return
@@ -141,6 +142,7 @@ function Lesson({ lessonId }: { lessonId: string }) {
           planHref={planHref}
           subject={subject}
           sections={sections}
+          blocks={blocks}
           onStart={startQuiz}
           onRetry={retryLesson}
         />
@@ -215,6 +217,7 @@ type ReadingProps = {
   planHref: string
   subject: ReturnType<typeof subjectKey>
   sections: ReturnType<typeof splitSections>
+  blocks: LessonBlock[]
   onStart: () => void
   onRetry: () => void
 }
@@ -226,6 +229,7 @@ function Reading({
   planHref,
   subject,
   sections,
+  blocks,
   onStart,
   onRetry,
 }: ReadingProps) {
@@ -351,7 +355,7 @@ function Reading({
           {ready && (
             <>
               <div className="a-fade pt-4">
-                <LessonBody sections={sections} subject={subject} />
+                <LessonBody sections={sections} blocks={blocks} subject={subject} />
               </div>
               <div id="lesson-quiz" className="lesson-foot md:mt-10 md:scroll-mt-40">
                 <Button block onClick={onStart}>

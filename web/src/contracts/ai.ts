@@ -25,7 +25,7 @@ import {
 // One model call, reported through AiCallOptions.onCall. The backend writes
 // these to the llm_call table; evals collect them in memory.
 export type LlmCallRecord = {
-  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "feedback" | "embed";
+  task: "outline" | "extend" | "lesson" | "replan" | "learner_notes" | "book_map" | "feedback" | "embed";
   model: string;
   latencyMs: number;
   inputTokens: number | null;
@@ -74,19 +74,26 @@ export type OutlineOutput = z.infer<typeof OutlineOutput>;
 // What the model returns for an outline request. Either questions is empty
 // and the rest is a full outline, or the goal is too vague to plan: then
 // questions holds what to ask and lessons is [].
+const DraftLesson = LessonOutline.extend({
+  // -1 when the lesson is not taught from a book section.
+  bookSectionIndex: z.number(),
+  ...Timing,
+});
+
 export const OutlineDraft = z.object({
   questions: z.array(z.string()),
   subject: z.string(),
   title: z.string(),
-  lessons: z.array(
-    LessonOutline.extend({
-      // -1 when the lesson is not taught from a book section.
-      bookSectionIndex: z.number(),
-      ...Timing,
-    }),
-  ),
+  lessons: z.array(DraftLesson),
 });
 export type OutlineDraft = z.infer<typeof OutlineDraft>;
+
+// What the model returns when a finished plan is continued: the next
+// lessons only.
+export const ExtendDraft = z.object({
+  lessons: z.array(DraftLesson),
+});
+export type ExtendDraft = z.infer<typeof ExtendDraft>;
 
 // What the model returns when mapping a book. It sees the chunks numbered
 // from 0 and says where each section starts.
@@ -125,8 +132,94 @@ export const GeneratedQuestion = z.object({
 });
 export type GeneratedQuestion = z.infer<typeof GeneratedQuestion>;
 
+// The interactive blocks as the model writes them (stored form: LessonBlock
+// in domain.ts). Kept flat so the schema works across providers: one object
+// shape per array, every field always present, "" where a field does not
+// apply. generateLesson turns them into LessonBlocks and checks them.
+
+// An expression is a number or a formula as text: "3", "2*m + b".
+export const GeneratedGraph = z.object({
+  // Lowercase kebab-case, unique in the lesson, e.g. "graph-1".
+  id: z.string(),
+  title: z.string(),
+  caption: z.string(),
+  xMin: z.number(),
+  xMax: z.number(),
+  yMin: z.number(),
+  yMax: z.number(),
+  parameters: z.array(
+    z.object({
+      name: z.string(),
+      label: z.string(),
+      min: z.number(),
+      max: z.number(),
+      step: z.number(),
+      value: z.number(),
+    }),
+  ),
+  elements: z.array(
+    z.object({
+      kind: z.enum(["point", "segment", "line", "vector", "circle", "function", "polygon"]),
+      label: z.string(),
+      tone: z.enum(["primary", "secondary", "muted"]),
+      dashed: z.boolean(),
+      // point: its position. segment, line, vector: the first point.
+      // circle: the center.
+      x1: z.string(),
+      y1: z.string(),
+      // segment, line, vector: the second point.
+      x2: z.string(),
+      y2: z.string(),
+      // circle: the radius.
+      r: z.string(),
+      // function: the right-hand side of y = ..., using x.
+      expr: z.string(),
+      // polygon: its corners in order.
+      points: z.array(z.object({ x: z.string(), y: z.string() })),
+    }),
+  ),
+  readouts: z.array(z.object({ label: z.string(), expr: z.string() })),
+});
+export type GeneratedGraph = z.infer<typeof GeneratedGraph>;
+
+export const GeneratedNumberLine = z.object({
+  id: z.string(),
+  title: z.string(),
+  caption: z.string(),
+  min: z.number(),
+  max: z.number(),
+  step: z.number(),
+  points: z.array(z.object({ value: z.number(), label: z.string(), open: z.boolean() })),
+  // from and to as text: a number, or "" when the range runs off that end.
+  ranges: z.array(z.object({ from: z.string(), to: z.string() })),
+});
+export type GeneratedNumberLine = z.infer<typeof GeneratedNumberLine>;
+
+export const GeneratedCheck = z.object({
+  id: z.string(),
+  prompt: z.string(),
+  // 2 to CHOICES_PER_QUESTION entries.
+  choices: z.array(z.string()),
+  correctIndex: z.number(),
+  // One entry per choice, in the same order.
+  feedback: z.array(z.string()),
+});
+export type GeneratedCheck = z.infer<typeof GeneratedCheck>;
+
+export const GeneratedSteps = z.object({
+  id: z.string(),
+  title: z.string(),
+  steps: z.array(z.object({ text: z.string(), math: z.string() })),
+});
+export type GeneratedSteps = z.infer<typeof GeneratedSteps>;
+
 export const LessonOutput = z.object({
+  // Places each block with a line holding only its id: [[graph-1]].
   bodyMarkdown: z.string(),
+  graphs: z.array(GeneratedGraph),
+  numberLines: z.array(GeneratedNumberLine),
+  checks: z.array(GeneratedCheck),
+  steppedExamples: z.array(GeneratedSteps),
   questions: z.array(GeneratedQuestion),
 });
 export type LessonOutput = z.infer<typeof LessonOutput>;
@@ -179,6 +272,31 @@ export type GenerateOutlineInput = {
   // The map of the source book, or [] when there is no book. The outline is
   // planned from the whole map, not from retrieved excerpts.
   bookSections: BookSection[];
+};
+
+// A lesson already in the plan, as the model sees it when continuing.
+export type PlanLesson = LessonOutline & {
+  kind: "core" | "remedial" | "retry" | "extension";
+  // Share of quiz questions answered correctly on the latest attempt, 0 to
+  // 1; null if the lesson was never attempted.
+  score: number | null;
+  // The book section the lesson was taught from, or null.
+  bookSectionIndex: number | null;
+};
+
+export type ExtendOutlineInput = {
+  // The goal the plan was built for, its subject and its title.
+  prompt: string;
+  subject: string;
+  title: string;
+  // Every lesson of the plan so far, in order. All of them are done.
+  lessons: PlanLesson[];
+  learner: LearnerProfile;
+  knownSkills: string[];
+  // The map of the plan's book, or [] when there is no book.
+  bookSections: BookSection[];
+  // How many lessons to plan at most.
+  maxLessons: number;
 };
 
 export type GenerateLessonInput = {
@@ -252,8 +370,16 @@ export interface AiService {
     options?: AiCallOptions,
   ): Promise<OutlineResult>;
 
+  // The next lessons of a plan the child has finished: where the plan would
+  // naturally go on, built on what was taught and how it went. 1 to
+  // input.maxLessons lessons, none repeating a lesson of the plan.
+  extendOutline(
+    input: ExtendOutlineInput,
+    options?: AiCallOptions,
+  ): Promise<{ lessons: OutlineLesson[] }>;
+
   // Returns stored-form content: question ids assigned, slugs and choice
-  // counts checked.
+  // counts checked, every block valid and placed in the body.
   generateLesson(
     input: GenerateLessonInput,
     options?: AiCallOptions,

@@ -13,6 +13,7 @@ import type { Curriculum, LessonSummary, ReplanEvent } from '@/contracts/domain'
 import { api } from '@/lib/api'
 import { SUBJECTS, subjectKey } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
+import { KeepGoing } from './KeepGoing'
 import './plan.css'
 
 const QUESTIONS_SHOWN = 5
@@ -331,7 +332,15 @@ function UpNextCard({ lesson }: { lesson: LessonSummary }) {
   )
 }
 
-function DoneCard({ lessons }: { lessons: LessonSummary[] }) {
+function DoneCard({
+  lessons,
+  curriculumId,
+  onExtended,
+}: {
+  lessons: LessonSummary[]
+  curriculumId: string
+  onExtended: () => void
+}) {
   const scored = lessons.filter((lesson) => lesson.lastScore !== null)
   const average = scored.length
     ? Math.round((scored.reduce((sum, lesson) => sum + (lesson.lastScore ?? 0), 0) / scored.length) * 100)
@@ -351,7 +360,8 @@ function DoneCard({ lessons }: { lessons: LessonSummary[] }) {
             : `Average quiz score ${average}%. Every lesson can be opened again from the list.`}
         </p>
       </div>
-      <Link href="/app" className="btn md wide">
+      <KeepGoing curriculumId={curriculumId} onExtended={onExtended} />
+      <Link href="/app" className="btn q wide" style={{ height: 44 }}>
         Back to plans
       </Link>
     </div>
@@ -519,7 +529,7 @@ export function CurriculumPage() {
           ) : current ? (
             <UpNextCard lesson={current} />
           ) : (
-            <DoneCard lessons={lessons} />
+            <DoneCard lessons={lessons} curriculumId={curriculum.id} onExtended={reload} />
           )}
         </div>
 

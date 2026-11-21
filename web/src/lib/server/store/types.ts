@@ -142,6 +142,11 @@ export interface Store {
     title: string;
     lessons: NewLesson[];
   }): Promise<string>;
+  /**
+   * Adds lessons after the last one and returns their ids in order. The
+   * caller holds the replan claim, so positions cannot move meanwhile.
+   */
+  appendLessons(curriculumId: string, lessons: NewLesson[]): Promise<string[]>;
   /** Newest first. */
   listCurricula(childId: string): Promise<CurriculumRow[]>;
   getCurriculum(id: string): Promise<CurriculumRow | null>;

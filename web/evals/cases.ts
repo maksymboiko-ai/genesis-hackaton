@@ -7,15 +7,23 @@ import type {
   LessonAttemptSummary,
   LessonOutline,
   OutlineLesson,
+  PlanLesson,
   PreparedBook,
 } from "@/contracts/ai";
-import type { BookSection, LearnerProfile } from "@/contracts/domain";
+import {
+  MAX_EXTEND_LESSONS,
+  MAX_OUTLINE_LESSONS,
+  type BookSection,
+  type LearnerProfile,
+  type LessonContent,
+} from "@/contracts/domain";
+import { lessonSize } from "@/lib/ai/prompts";
 import { BOOK_SECTION_TITLES, BOOK_TEXT, BOOK_TITLE } from "./fixtures/book";
 import { LONG_BOOK, PLAIN_BOOK, type MapBook } from "./fixtures/map-books";
 
 export type EvalCase = {
   name: string;
-  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map";
+  task: "outline" | "extend" | "lesson" | "replan" | "learner_notes" | "book_map";
   run: (ai: AiService, options: AiCallOptions) => Promise<string[]>;
 };
 
@@ -203,13 +211,17 @@ async function outlineCase(
   options: AiCallOptions,
   input: Parameters<AiService["generateOutline"]>[0],
   extra: (lessons: OutlineLesson[], title: string, subject: string) => Record<string, boolean>,
+  // How many lessons a plan for this goal should have: its length follows
+  // the goal's scope.
+  [minLessons, maxLessons]: [number, number] = [4, MAX_OUTLINE_LESSONS],
 ): Promise<string[]> {
   const result = await ai.generateOutline(input, options);
   if (result.kind !== "outline") return ["asked questions for a clear goal"];
   const { lessons, title, subject } = result.outline;
-  const maxLessons = input.bookSections.length ? 15 : 8;
   return failures({
-    [`5 to ${maxLessons} lessons`]: lessons.length >= 5 && lessons.length <= maxLessons,
+    [`${minLessons} to ${maxLessons} lessons (got ${lessons.length})`]:
+      lessons.length >= minLessons && lessons.length <= maxLessons,
+    "no two lessons share a title": new Set(lessons.map((l) => l.title.toLowerCase())).size === lessons.length,
     "no section without a book":
       input.bookSections.length > 0 || lessons.every((l) => l.bookSectionIndex === null),
     "1 to 3 skills per lesson": lessons.every((l) => l.skills.length >= 1 && l.skills.length <= 3),
@@ -237,15 +249,27 @@ async function lessonCase(
   ai: AiService,
   options: AiCallOptions,
   input: Parameters<AiService["generateLesson"]>[0],
-  extra: (body: string) => Record<string, boolean>,
+  extra: (body: string, content: LessonContent) => Record<string, boolean>,
 ): Promise<string[]> {
   const content = await ai.generateLesson(input, options);
   const tested = new Set(content.questions.map((q) => q.skill));
   const bodyWords = words(content.bodyMarkdown);
+  const size = lessonSize(input.learner.gradeLevel);
+  // The prompt gives a range; a lesson somewhat outside it is still fine.
+  const minWords = Math.round(size.minWords * 0.75);
+  const maxWords = Math.round(size.maxWords * 1.4);
+  const count = (type: LessonContent["blocks"][number]["type"]) => content.blocks.filter((b) => b.type === type).length;
   return failures({
-    "4 or 5 questions": content.questions.length >= 4 && content.questions.length <= 5,
+    [`${size.questions - 1} to ${size.questions + 1} questions (got ${content.questions.length})`]:
+      Math.abs(content.questions.length - size.questions) <= 1,
     "every skill tested": input.lesson.skills.every((skill) => tested.has(skill)),
-    "body is 150 to 700 words": bodyWords >= 150 && bodyWords <= 700,
+    [`body is ${minWords} to ${maxWords} words (got ${bodyWords})`]: bodyWords >= minWords && bodyWords <= maxWords,
+    [`2 or 3 quick checks (got ${count("check")})`]: count("check") >= 2 && count("check") <= 4,
+    "a stepped example": count("steps") >= 1,
+    "a Key idea section": /^#{2,3} .*key idea/im.test(content.bodyMarkdown),
+    "a check does not repeat a quiz question": !content.blocks.some(
+      (b) => b.type === "check" && content.questions.some((q) => q.prompt.trim() === b.prompt.trim()),
+    ),
     "correct choice position varies":
       new Set(content.questions.map((q) => q.correctIndex)).size > 1,
     "every question has an explanation": content.questions.every((q) => q.explanation.length > 0),
@@ -261,15 +285,263 @@ async function lessonCase(
         /^(wrong|incorrect|no)\b|\b(is|are|was|were|that's|you're) (wrong|incorrect|silly)\b/i.test(text),
       ),
     ),
-    "math is in backticks": /`[^`]*\d[^`]*`/.test(content.bodyMarkdown),
+    // A reading lesson may have no numbers at all.
+    "math is in backticks": input.subject === "reading" || /`[^`]*\d[^`]*`/.test(content.bodyMarkdown),
     "ends with a Remember line": /\*\*Remember:?\*\*/.test(content.bodyMarkdown),
-    ...extra(content.bodyMarkdown),
+    ...extra(content.bodyMarkdown, content),
+  });
+}
+
+const doneLesson = (title: string, objective: string, skills: string[], score: number): PlanLesson => ({
+  title,
+  objective,
+  skills,
+  kind: "core",
+  score,
+  bookSectionIndex: null,
+});
+
+const finishedPlan: PlanLesson[] = [
+  doneLesson("What an equation is saying", "Read an equation as a balance between two sides.", ["reading-equations"], 1),
+  doneLesson("Undoing one step at a time", "Solve one-step equations with inverse operations.", ["inverse-operations"], 0.86),
+  doneLesson("Negatives on both sides", "Keep track of signs when adding and subtracting negatives.", ["negative-numbers"], 0.43),
+  doneLesson("Two-step equations", "Solve two-step equations and check the answer.", ["two-step-equations"], 0.86),
+  doneLesson("From word problem to equation", "Turn a short word problem into an equation and solve it.", ["equation-word-problems"], 0.71),
+];
+
+const afterEquations: LearnerProfile = {
+  gradeLevel: 7,
+  notes: "Solves equations step by step and checks answers. Loses the sign when a negative number is involved.",
+  mastery: [
+    { subject: "algebra", skill: "reading-equations", mastery: 0.74 },
+    { subject: "algebra", skill: "inverse-operations", mastery: 0.7 },
+    { subject: "algebra", skill: "negative-numbers", mastery: 0.38 },
+    { subject: "algebra", skill: "two-step-equations", mastery: 0.68 },
+    { subject: "algebra", skill: "equation-word-problems", mastery: 0.61 },
+  ],
+};
+
+async function extendCase(
+  ai: AiService,
+  options: AiCallOptions,
+  input: Parameters<AiService["extendOutline"]>[0],
+  extra: (lessons: OutlineLesson[]) => Record<string, boolean>,
+): Promise<string[]> {
+  const { lessons } = await ai.extendOutline(input, options);
+  const before = new Set(input.lessons.map((l) => l.title.toLowerCase()));
+  return failures({
+    [`3 to ${input.maxLessons} lessons (got ${lessons.length})`]: lessons.length >= 3 && lessons.length <= input.maxLessons,
+    "no lesson repeats the plan": !lessons.some((l) => before.has(l.title.toLowerCase())),
+    "no two lessons share a title": new Set(lessons.map((l) => l.title.toLowerCase())).size === lessons.length,
+    "1 to 3 skills per lesson": lessons.every((l) => l.skills.length >= 1 && l.skills.length <= 3),
+    ...extra(lessons),
   });
 }
 
 // --- Cases ------------------------------------------------------------------
 
 export const CASES: EvalCase[] = [
+  {
+    name: "outline: one narrow skill gets a short plan (length)",
+    task: "outline",
+    run: (ai, options) =>
+      outlineCase(
+        ai,
+        options,
+        {
+          prompt: "He has a quiz on Friday on adding fractions with unlike denominators.",
+          clarifications: [],
+          learner: newLearner(5),
+          knownSkills: [],
+          bookSections: [],
+        },
+        () => ({}),
+        [4, 8],
+      ),
+  },
+  {
+    name: "outline: a broad subject gets a full plan (length)",
+    task: "outline",
+    run: (ai, options) =>
+      outlineCase(
+        ai,
+        options,
+        {
+          prompt: "I want to learn analytic geometry.",
+          clarifications: [],
+          learner: newLearner(10),
+          knownSkills: [],
+          bookSections: [],
+        },
+        (lessons) => {
+          const text = lessons.map((l) => `${l.title} ${l.objective}`).join(" ");
+          return {
+            "covers distance and midpoint": /distance/i.test(text) && /midpoint/i.test(text),
+            "covers lines and slope": /slope/i.test(text),
+            "covers circles": /circle/i.test(text),
+            "covers a conic beyond the circle": /parabola|ellipse|hyperbola|conic/i.test(text),
+            "has mixed practice or review": /practice|review|mixed|putting it (all )?together|apply/i.test(text),
+          };
+        },
+        [16, MAX_OUTLINE_LESSONS],
+      ),
+  },
+  {
+    name: "extend: continues a finished plan",
+    task: "extend",
+    run: (ai, options) =>
+      extendCase(
+        ai,
+        options,
+        {
+          prompt: "My daughter got a B in algebra, she struggles with linear equations.",
+          subject: "algebra",
+          title: "Linear equations from the ground up",
+          lessons: finishedPlan,
+          learner: afterEquations,
+          knownSkills: afterEquations.mastery.map((m) => m.skill),
+          bookSections: [],
+          maxLessons: MAX_EXTEND_LESSONS,
+        },
+        (lessons) => ({
+          "returns to the shaky skill first": lessons[0].skills.includes("negative-numbers"),
+          "goes beyond the plan": lessons.some((l) => l.skills.some((s) => !afterEquations.mastery.some((m) => m.skill === s))),
+          "stays in algebra": !/geometry|biology|grammar/i.test(lessons.map((l) => l.title).join(" ")),
+        }),
+      ),
+  },
+  {
+    name: "extend: goes on with the book's untaught sections (RAG)",
+    task: "extend",
+    run: (ai, options) =>
+      extendCase(
+        ai,
+        options,
+        {
+          prompt: "She has a test on the equations chapter of her math book next week.",
+          subject: "algebra",
+          title: "The equations chapter",
+          lessons: [3, 4, 5].map((index) => ({
+            ...doneLesson(BOOK_SECTIONS[index].title, BOOK_SECTIONS[index].summary, [`section-${index}-skill`], 0.9),
+            bookSectionIndex: index,
+          })),
+          learner: newLearner(6),
+          knownSkills: [],
+          bookSections: BOOK_SECTIONS,
+          maxLessons: MAX_EXTEND_LESSONS,
+        },
+        (lessons) => {
+          const used = lessons.map((l) => l.bookSectionIndex).filter((i) => i !== null);
+          return {
+            "teaches the ratios chapter next": used.includes(6) && used.includes(7),
+            "does not teach a taught section again": ![3, 4, 5].some((index) => used.includes(index)),
+          };
+        },
+      ),
+  },
+  {
+    name: "lesson: analytic geometry has a graph to play with (blocks)",
+    task: "lesson",
+    run: (ai, options) =>
+      lessonCase(
+        ai,
+        options,
+        {
+          subject: "analytic geometry",
+          lesson: {
+            title: "The distance between two points",
+            objective: "Find the distance between two points on the coordinate plane with the distance formula.",
+            skills: ["distance-formula"],
+            kind: "core",
+          },
+          learner: newLearner(10),
+          previousLessonTitles: ["Points on the coordinate plane", "The Pythagorean theorem on a grid"],
+          sourceChunks: [],
+        },
+        (_, content) => {
+          const graphs = content.blocks.filter((b) => b.type === "graph");
+          return {
+            "has a graph": graphs.length >= 1,
+            "a graph is interactive": graphs.some((g) => g.parameters.length > 0),
+            "a graph shows a live value": graphs.some((g) => g.readouts.length > 0),
+          };
+        },
+      ),
+  },
+  {
+    name: "lesson: slope lesson draws a line the child can change (blocks)",
+    task: "lesson",
+    run: (ai, options) =>
+      lessonCase(
+        ai,
+        options,
+        {
+          subject: "algebra",
+          lesson: {
+            title: "Slope and y-intercept",
+            objective: "Read the slope and the y-intercept from an equation in the form y = mx + b.",
+            skills: ["slope-intercept-form"],
+            kind: "core",
+          },
+          learner: newLearner(8),
+          previousLessonTitles: ["Plotting points", "Tables of values"],
+          sourceChunks: [],
+        },
+        (_, content) => {
+          const graphs = content.blocks.filter((b) => b.type === "graph");
+          return {
+            "draws a function": graphs.some((g) => g.elements.some((e) => e.kind === "function" || e.kind === "line")),
+            "a graph is interactive": graphs.some((g) => g.parameters.length > 0),
+          };
+        },
+      ),
+  },
+  {
+    name: "lesson: rounding in grade 3 uses a number line (blocks)",
+    task: "lesson",
+    run: (ai, options) =>
+      lessonCase(
+        ai,
+        options,
+        {
+          subject: "arithmetic",
+          lesson: {
+            title: "Rounding to the nearest ten",
+            objective: "Round a two-digit number to the nearest ten.",
+            skills: ["rounding-to-tens"],
+            kind: "core",
+          },
+          learner: newLearner(3),
+          previousLessonTitles: ["Tens and ones"],
+          sourceChunks: [],
+        },
+        (_, content) => ({ "has a number line": content.blocks.some((b) => b.type === "number_line") }),
+      ),
+  },
+  {
+    name: "lesson: a reading lesson draws nothing (blocks)",
+    task: "lesson",
+    run: (ai, options) =>
+      lessonCase(
+        ai,
+        options,
+        {
+          subject: "reading",
+          lesson: {
+            title: "Topic or main idea?",
+            objective: "Tell a topic apart from the point the author makes about it.",
+            skills: ["topic-vs-main-idea"],
+            kind: "core",
+          },
+          learner: newLearner(4),
+          previousLessonTitles: [],
+          sourceChunks: [],
+        },
+        (_, content) => ({
+          "no graph or number line": !content.blocks.some((b) => b.type === "graph" || b.type === "number_line"),
+        }),
+      ),
+  },
   {
     name: "outline: clear goal",
     task: "outline",

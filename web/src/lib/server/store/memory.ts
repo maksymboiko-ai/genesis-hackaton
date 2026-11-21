@@ -208,6 +208,16 @@ export class MemoryStore implements Store {
     return id;
   }
 
+  async appendLessons(curriculumId: string, lessons: NewLesson[]) {
+    if (!this.data.curricula.some((c) => c.id === curriculumId)) throw new Error("fk violation: curriculum");
+    const positions = this.data.lessons.filter((l) => l.curriculumId === curriculumId).map((l) => l.position);
+    const start = positions.length ? Math.max(...positions) + 1 : 0;
+    // Build everything first so a bad lesson leaves nothing behind.
+    const rows = lessons.map((l, i) => this.newLessonRow(curriculumId, start + i, l));
+    this.data.lessons.push(...rows);
+    return rows.map((r) => r.id);
+  }
+
   async listCurricula(childId: string) {
     return copy(
       this.data.curricula
