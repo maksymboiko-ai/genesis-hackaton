@@ -111,7 +111,7 @@ const OUTLINES: Record<'math' | 'read' | 'sci', MockOutline> = {
 // their blurb names.
 function outlineFor(name: string, family: string, blurb: string): MockOutline {
   if (family === 'math' || family === 'read' || family === 'sci') return OUTLINES[family]
-  const topics = blurb.split(/,\s*/)
+  const topics = [...blurb.split(/,\s*/), 'Key ideas in practice', 'Putting it all together']
   return {
     subject: name,
     title: `${name} basics`,

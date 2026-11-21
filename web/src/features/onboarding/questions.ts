@@ -196,7 +196,9 @@ function startersFor(grade: number, name: string): string[] {
   if (core && (subject.family === 'math' || subject.family === 'read' || subject.family === 'sci')) {
     return STARTERS[subject.family][grade - 1]
   }
-  return subject.blurb.split(/,\s*/).map(cap)
+  const topics = subject.blurb.split(/,\s*/).map(cap)
+  const general = [`Catch up in ${subject.name}`, `A ${subject.name} test is coming`]
+  return [...topics, ...general].slice(0, Math.max(3, topics.length))
 }
 
 export function goalStarters(gradeLevel: number | null, subjects: string[]) {
