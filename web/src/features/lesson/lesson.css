@@ -1,0 +1,271 @@
+.ld.fs-0 {
+  font-size: 17px;
+}
+.ld.fs-2 {
+  font-size: 21px;
+}
+.ld section {
+  scroll-margin-top: 150px;
+}
+.ld > section:first-child > h2:first-child {
+  margin-top: 8px;
+}
+.ld ol.steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  counter-reset: step;
+}
+.ld ol.steps > li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  margin: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  font-size: 17px;
+  line-height: 1.5;
+}
+.ld ol.steps > li:first-child {
+  border-top: 0;
+}
+.ld ol.steps > li::before {
+  content: counter(step);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: var(--s);
+  font: 800 13px/1 var(--font);
+}
+.ld ol.steps > li p {
+  margin: 0;
+}
+.ld ol.steps > li .eq {
+  margin: 4px 0 0;
+}
+.ld .box > :last-child {
+  margin-bottom: 0;
+}
+.ld .box.rule p {
+  font: 700 19px/1.45 var(--font);
+}
+.ld .box.plain {
+  background: #fff;
+  border: 1.5px solid var(--border);
+}
+.ld .box.slip p,
+.ld .box.recap p {
+  font-size: 17px;
+  line-height: 1.5;
+}
+.ld .eq {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ld p.eq.solo {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  margin: 0 0 18px;
+}
+.ld .remember {
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--s-tint);
+  margin-top: 28px;
+}
+.ld .passage {
+  font-size: 1em;
+}
+
+.lesson-bar {
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+@media (min-width: 768px) {
+  .lesson-bar {
+    position: sticky;
+    top: 72px;
+    z-index: 10;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+  }
+}
+.lesson-bar .track {
+  height: 4px;
+  background: #f0f1f4;
+}
+.lesson-bar .track i {
+  display: block;
+  height: 100%;
+  background: var(--s);
+  transform-origin: left;
+  transition: transform 120ms linear;
+}
+.barbtn {
+  height: 44px;
+  padding: 0 10px;
+  gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
+  font: 600 16px var(--font);
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 120ms var(--ease);
+  max-width: 100%;
+  min-width: 0;
+}
+.barbtn:hover {
+  background: var(--surface-2);
+}
+
+.toc a {
+  padding: 8px 12px;
+  border-left: 3px solid #e8e9ee;
+  font: 500 14px/1.35 var(--font);
+  color: var(--muted);
+  text-decoration: none;
+  transition:
+    border-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+.toc a:hover {
+  color: var(--text);
+}
+.toc a.on {
+  border-left-color: var(--s);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.lesson-foot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 14px 20px calc(18px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+@media (min-width: 768px) {
+  .lesson-foot {
+    position: static;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+}
+
+.qdots button {
+  flex: 1;
+  height: 6px;
+  cursor: pointer;
+  position: relative;
+}
+.qdots button::before {
+  content: '';
+  position: absolute;
+  inset: -14px 0;
+}
+.qdots button.done {
+  background: var(--s);
+}
+.qdots button.cur {
+  background: #fff;
+  outline: 2px solid var(--s);
+  outline-offset: -2px;
+}
+.qa .mono {
+  font-size: 18px;
+}
+.kbd {
+  font: 600 12px var(--font);
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.18);
+  display: none;
+}
+@media (min-width: 768px) and (hover: hover) {
+  .kbd {
+    display: inline-block;
+  }
+}
+.peek {
+  border-radius: 16px;
+  background: #fffcf6;
+  border: 1.5px solid #eadfcb;
+  padding: 12px 14px;
+}
+.peek summary {
+  font: 700 14px var(--font);
+  color: #7a6a52;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  min-height: 24px;
+  cursor: pointer;
+}
+.peek summary::-webkit-details-marker {
+  display: none;
+}
+.peek[open] .when-closed,
+.peek:not([open]) .when-open {
+  display: none;
+}
+.peek p {
+  margin: 8px 0 0;
+  font: 400 15px/1.55 var(--serif);
+}
+.peek p b {
+  font: 600 12px var(--font);
+  color: #9a8f7c;
+  margin-right: 4px;
+}
+.scorebar i {
+  display: block;
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  transform-origin: left;
+  animation: grow-x 480ms var(--ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scorebar i {
+    animation: none;
+  }
+  .lesson-bar .track i {
+    transition: none;
+  }
+}
+.ld ol.steps > li p.eq.solo {
+  padding: 0;
+  background: none;
+  margin: 4px 0 0;
+}
+.ld ol.steps > li {
+  row-gap: 2px;
+}
+.ld ol.steps > li::before {
+  grid-column: 1;
+  grid-row: 1;
+}
+.ld ol.steps > li > * {
+  grid-column: 2;
+}
+@media (min-width: 768px) {
+  .ld {
+    max-width: 100%;
+  }
+}

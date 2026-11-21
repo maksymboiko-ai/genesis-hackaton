@@ -1,5 +1,4 @@
 import {
-  CHOICES_PER_QUESTION,
   EXCELLING_FROM,
   MASTERY_ALPHA,
   MASTERY_START,
@@ -24,6 +23,9 @@ import {
   SubmitAttemptRequest,
 } from '@/contracts/api'
 import type { ApiError } from '@/contracts/api'
+import { MOCK_LESSONS } from './api-mock-lessons'
+import { subjectKey } from './subjects'
+import type { SubjectKey } from './subjects'
 
 type StoredChild = Child & { notes: string }
 type StoredBook = Book & { readyAt: number }
@@ -59,12 +61,45 @@ const LESSON_MS = 2000
 const BOOK_MS = 3000
 const REPLAN_MS = 3000
 
-const OUTLINE_STEPS = [
-  { title: 'Foundations', objective: 'Recall the basics this topic builds on.', skill: 'foundations' },
-  { title: 'Core ideas', objective: 'Understand the main ideas step by step.', skill: 'core-ideas' },
-  { title: 'Guided practice', objective: 'Solve typical problems with hints.', skill: 'guided-practice' },
-  { title: 'Putting it together', objective: 'Apply everything without help.', skill: 'independent-work' },
-]
+const OUTLINES: Record<SubjectKey, { subject: string; title: string; steps: { title: string; objective: string; skill: string }[] }> = {
+  math: {
+    subject: 'algebra',
+    title: 'Two-step equations',
+    steps: [
+      { title: 'What an equation is saying', objective: 'Read an equation as a balance between two sides.', skill: 'reading-equations' },
+      { title: 'Undoing one step at a time', objective: 'Solve one-step equations with inverse operations.', skill: 'inverse-operations' },
+      { title: 'Negatives on both sides', objective: 'Keep track of signs when adding and subtracting negatives.', skill: 'negative-numbers' },
+      { title: 'Moving terms across the equals sign', objective: 'Move a term to the other side without flipping the wrong sign.', skill: 'moving-terms' },
+      { title: 'Two-step equations', objective: 'Solve two-step equations and check the answer.', skill: 'two-step-equations' },
+      { title: 'Equations with fractions', objective: 'Clear fractions before solving.', skill: 'fraction-equations' },
+      { title: 'From word problem to equation', objective: 'Turn a short word problem into an equation and solve it.', skill: 'word-problems' },
+    ],
+  },
+  read: {
+    subject: 'reading',
+    title: 'Finding the main idea',
+    steps: [
+      { title: 'Topic or main idea?', objective: 'Tell a topic apart from the point the author makes about it.', skill: 'topic-vs-main-idea' },
+      { title: 'Spotting the key sentence', objective: 'Find the sentence that carries the main idea of a paragraph.', skill: 'key-sentences' },
+      { title: 'Details that support it', objective: 'Pick the details that back up the main idea.', skill: 'supporting-details' },
+      { title: 'When the main idea is not stated', objective: 'Infer the main idea from the details.', skill: 'making-inferences' },
+      { title: 'Summing up a longer passage', objective: 'Write a one-sentence summary of a multi-paragraph text.', skill: 'summarizing' },
+      { title: 'Citing lines as evidence', objective: 'Quote the line that proves an answer.', skill: 'citing-evidence' },
+    ],
+  },
+  sci: {
+    subject: 'biology',
+    title: 'How cells work',
+    steps: [
+      { title: 'What counts as alive', objective: 'List the signs that something is living.', skill: 'characteristics-of-life' },
+      { title: 'Inside a cell', objective: 'Name the main parts of a cell and what each does.', skill: 'cell-parts' },
+      { title: 'Plant cells and animal cells', objective: 'Compare plant and animal cells.', skill: 'plant-vs-animal-cells' },
+      { title: 'How cells get energy', objective: 'Explain photosynthesis and respiration in plain words.', skill: 'cell-energy' },
+      { title: 'How cells divide', objective: 'Describe what happens when a cell divides.', skill: 'cell-division' },
+      { title: 'From cells to body systems', objective: 'Connect cells, tissues, organs and systems.', skill: 'levels-of-organization' },
+    ],
+  },
+}
 
 class MockError extends Error {
   status: number
@@ -142,34 +177,34 @@ function newLesson(
 }
 
 function buildContent(lesson: StoredLesson): LessonContent {
-  const skills = lesson.skills.length ? lesson.skills : ['general']
-  const questions = [0, 1, 2].map((index) => {
-    const skill = skills[index % skills.length]
-    const correctIndex = (index + lesson.position) % CHOICES_PER_QUESTION
-    const wrong = ['A common mistake', 'A partly right answer', 'An unrelated answer']
-    const choices = Array.from({ length: CHOICES_PER_QUESTION }, (_, choice) =>
-      choice === correctIndex ? 'The correct answer' : wrong.pop()!,
-    )
-    return {
-      id: id(),
-      prompt: `Question ${index + 1}: which answer shows ${label(skill)}?`,
-      choices,
-      correctIndex,
-      explanation: `This one is correct because it applies ${label(skill)} the way the lesson explains.`,
-      skill,
-    }
-  })
+  const text = `${lesson.title} ${lesson.objective} ${lesson.skills.join(' ')}`
+  const bySkill = MOCK_LESSONS.find((item) => lesson.skills.includes(item.skill))
+  const pool = MOCK_LESSONS.filter((item) => item.subject === subjectKey(text))
+  const source = bySkill ?? pool[lesson.position % pool.length]
+  const skill = lesson.skills[0] ?? source.skill
+  const steps = (items: { text: string; eq?: string }[]) =>
+    items.map((item, index) => `${index + 1}. ${item.text}${item.eq ? `\n\n   \`${item.eq}\`` : ''}`).join('\n\n')
 
   return {
     bodyMarkdown: [
-      `## ${lesson.title}`,
-      lesson.objective,
-      '### Key idea',
-      `This is sample lesson text from the mock API. The real lesson explains **${label(skills[0])}** with examples at the learner's level.`,
-      '### Example',
-      '1. Read the problem carefully.\n2. Pick the rule that fits.\n3. Check the answer.',
-    ].join('\n\n'),
-    questions,
+      source.hook,
+      `## The rule\n\n${source.rule}`,
+      `## ${source.pointsTitle}\n\n${source.points.map((point) => `- ${point}`).join('\n')}`,
+      source.passage && `## Read this\n\n${source.passage.map((line) => `> ${line}`).join('\n')}`,
+      `## Worked example: ${source.exampleTitle}\n\n${steps(source.example)}`,
+      `## Common slip\n\n${source.slip}`,
+      `**Remember:** ${source.recap}`,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    questions: source.questions.map((question) => ({
+      id: id(),
+      prompt: question.prompt,
+      choices: [...question.choices],
+      correctIndex: question.correct,
+      explanation: question.why,
+      skill,
+    })),
   }
 }
 
@@ -190,13 +225,13 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
       .filter((lesson) => lesson !== undefined)
 
     const current = lessons.find((lesson) => !lesson.completedAt)
-    const start = current ? current.position + 1 : lessons.length
+    const start = current ? current.position : lessons.length
 
     missingSkills.forEach((skill) =>
       inserted.push(
         newLesson(curriculum.id, start + inserted.length, 'remedial', {
-          title: `Review: ${label(skill)}`,
-          objective: `Rebuild ${label(skill)} from the ground up.`,
+          title: `${label(skill).charAt(0).toUpperCase()}${label(skill).slice(1)}, step by step`,
+          objective: `Go back over ${label(skill)} in smaller steps before moving on.`,
           skills: [skill],
         }),
       ),
@@ -209,20 +244,25 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
       .forEach((lesson) => (lesson.position += inserted.length))
 
     diagnosis = {
-      summary: 'The last lessons were too hard, so review lessons come first.',
-      mistakes: missingSkills.map((skill) => `Several wrong answers on ${label(skill)}.`),
+      summary: missingSkills.length
+        ? `The same slip kept showing up in ${missingSkills.map(label).join(' and ')}. These fix that first.`
+        : 'The last few quizzes were a stretch. These go back over the basics first.',
+      mistakes: missingSkills.map(
+        (skill) =>
+          `${wrong.filter((result) => result.skill === skill).length} missed answers on ${label(skill)} across the last ${window.length} quizzes.`,
+      ),
       missingSkills,
     }
   } else {
     inserted.push(
       newLesson(curriculum.id, lessons.length, 'extension', {
-        title: 'Challenge: going further',
-        objective: 'Harder problems for a learner who is ahead of the plan.',
+        title: 'Going further',
+        objective: 'Harder problems that build on everything so far.',
         skills: ['advanced-problems'],
       }),
     )
     diagnosis = {
-      summary: 'The last lessons went very well, so a harder lesson was added.',
+      summary: `${window.length} strong quizzes in a row. Time for something harder.`,
       mistakes: [],
       missingSkills: [],
     }
@@ -293,20 +333,21 @@ async function createCurriculum(db: Db, raw: unknown) {
   await delay(OUTLINE_MS)
 
   const topic = body.prompt.trim().replace(/\s+/g, ' ')
+  const outline = OUTLINES[subjectKey(body.prompt)]
   const curriculum: StoredCurriculum = {
     id: id(),
     childId: body.childId,
     bookId: body.bookId,
     prompt: body.prompt,
-    subject: 'General',
-    title: topic.length > 60 ? `${topic.slice(0, 57)}…` : topic,
+    subject: outline.subject,
+    title: topic.split(' ').length <= 5 ? topic.charAt(0).toUpperCase() + topic.slice(1) : outline.title,
     replanStatus: 'idle',
     lastReplanAt: 0,
     replanReadyAt: null,
     pendingTrigger: null,
   }
   db.curricula.push(curriculum)
-  OUTLINE_STEPS.forEach((step, position) =>
+  outline.steps.forEach((step, position) =>
     db.lessons.push(
       newLesson(curriculum.id, position, 'core', {
         title: step.title,

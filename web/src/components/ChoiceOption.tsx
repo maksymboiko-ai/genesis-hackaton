@@ -5,18 +5,19 @@ type Props = {
   value: string
   checked: boolean
   onChange: () => void
+  type?: 'radio' | 'checkbox'
   disabled?: boolean
   compact?: boolean
   children: ReactNode
 }
 
-export function ChoiceOption({ name, value, checked, onChange, disabled, compact, children }: Props) {
+export function ChoiceOption({ name, value, checked, onChange, type = 'radio', disabled, compact, children }: Props) {
   return (
     <label
       className={`flex min-h-12 cursor-pointer items-center gap-3 rounded-lg border border-border bg-surface py-3 transition has-checked:border-accent has-checked:ring-1 has-checked:ring-accent has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent has-disabled:cursor-default ${compact ? 'justify-center px-2' : 'px-4'}`}
     >
       <input
-        type="radio"
+        type={type}
         name={name}
         value={value}
         checked={checked}
