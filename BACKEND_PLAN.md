@@ -262,7 +262,7 @@ Added after checking the approved screens (`Product — learning app identity & 
 | T2 | Attempt saves the day in the child's calendar (`X-Timezone`, UTC fallback) | ✅ | retakes count |
 | T3 | `GET /api/children/:id/streak` → `{ days }`, owner only | ✅ | |
 | T4 | Streak pill, card, notice, page and +1 moment use saved days | ✅ | turtle pose from the saved streak |
-| C4 | Checks | ✅ | 117 tests; SQL 0004–0008; `next build`; smoke 29/29; screens checked in mock mode |
+| C4 | Checks | ✅ | 141 tests (after rebasing on rich lessons + CI); SQL 0004–0008; `next build`; smoke 29/29; screens checked in mock mode |
 
 ### Verification at the end of M7
 
