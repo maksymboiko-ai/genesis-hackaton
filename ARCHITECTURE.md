@@ -93,6 +93,7 @@ Defined in full in [supabase/migrations/0001_init.sql](supabase/migrations/0001_
 | `replan_event` | A record of each self-healing change, for display |
 | `book`, `book_chunk` | Uploaded textbooks, their section map and their embedded chunks |
 | `llm_call` | Model, latency and token counts for every model call |
+| `subscription` | One per parent account: the plan, the trial dates, and when it was first paid |
 
 Two ideas carry the design:
 
@@ -200,6 +201,21 @@ Retrieval is always scoped to one book by `book_id`, so one family's upload neve
 ## Accounts
 
 Parents sign up and sign in through `/api/auth/*`; the backend calls Supabase Auth and keeps the session in two httpOnly cookies scoped to `/api`, so the browser still only talks to `/api` and never sees a token. Every other endpoint needs a session (401 otherwise). Children and books have an `owner_id`; curricula, lessons and attempts belong to the parent through the child. A request for another family's data answers 404. See ADR 0004.
+
+### Subscriptions
+
+"Start free trial" on the paywall sends `POST /api/subscription` with the chosen plan, and the backend stores the account's 7-day trial in `subscription`. An account has one trial. There is no billing provider yet, so no payment is taken and nothing sets `paid_at`; when one is added, its webhook is the one place that should.
+
+## Admin analytics
+
+`/admin` is a dashboard for the team, fed by `GET /api/admin/analytics`. It is open only to the accounts whose emails are listed in the server's `ADMIN_EMAILS`; any other account gets 404. The numbers are computed in the backend from the tables above, with no separate analytics store, and the response holds counts and rates only: never a name, a prompt or an email.
+
+| Metric | Definition |
+|---|---|
+| **Recovery rate** (key metric, target 60%) | Of the `retry` lessons children have taken, the share scored 0.6 or above. A retry is scheduled for each lesson failed in a struggling window and comes after the remedial lessons. Retries not taken yet are not counted. |
+| 3 lessons in week 1 (guardrail) | The share of learners who finished 3 lessons within 7 days of being added |
+| Trial-to-paid (guardrail, benchmark 35%) | Of the trials that are over (ended, or paid early), the share with `paid_at` set |
+| AI | From `llm_call`, last 30 days: calls, failures, latency and tokens per task and model, and calls per day |
 
 ## Models and evals
 

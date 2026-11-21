@@ -3,6 +3,7 @@
 // All bodies are JSON unless stated otherwise. All paths are under /api.
 import { z } from "zod";
 import {
+  BillingPlan,
   Book,
   Child,
   Clarification,
@@ -16,6 +17,7 @@ import {
   Question,
   QuestionResult,
   ReplanTrigger,
+  Subscription,
 } from "./domain";
 
 // Every non-2xx response has this body.
@@ -233,3 +235,97 @@ export const SubmitAttemptResponse = z.object({
   nextLessonId: Id.nullable(),
 });
 export type SubmitAttemptResponse = z.infer<typeof SubmitAttemptResponse>;
+
+// --- Subscription -----------------------------------------------------------
+
+// POST /subscription
+// "Start free trial" on the paywall: starts the account's TRIAL_DAYS trial on
+// the chosen plan. An account has one trial; a second call changes nothing
+// and returns the trial already running. No payment is taken here.
+export const StartTrialRequest = z.object({ plan: BillingPlan });
+export type StartTrialRequest = z.infer<typeof StartTrialRequest>;
+export const StartTrialResponse = Subscription;
+
+// --- Admin ------------------------------------------------------------------
+
+// A share from 0 to 1, or null when there is nothing to divide by yet.
+const Rate = z.number().min(0).max(1).nullable();
+const Count = z.number().int().min(0);
+
+// GET /admin/analytics
+// Product-wide numbers, across all families: counts and rates only, never a
+// name, a prompt or an email. Only for the accounts listed in the server's
+// ADMIN_EMAILS; every other account gets "not_found".
+export const AdminAnalyticsResponse = z.object({
+  generatedAt: z.string().datetime(),
+  // The key metric (RECOVERY_TARGET in domain.ts).
+  recovery: z.object({
+    // passed / taken.
+    rate: Rate,
+    target: z.number(),
+    // Failed lessons a replan scheduled a retry for.
+    scheduled: Count,
+    // Retries the child has done, and those scored at the pass mark or above.
+    taken: Count,
+    passed: Count,
+    bySubject: z.array(z.object({ subject: z.string(), taken: Count, passed: Count, rate: Rate })),
+  }),
+  // Guardrail: learners who finished WEEK_ONE_LESSONS lessons within 7 days
+  // of being added. rate = reached / learners.
+  weekOne: z.object({
+    rate: Rate,
+    lessonsTarget: Count,
+    learners: Count,
+    reached: Count,
+    // Learners still inside their first 7 days; they may yet reach it.
+    inFirstWeek: Count,
+  }),
+  // Guardrail: of the trials that are over (ended or paid), the share paid.
+  trialToPaid: z.object({
+    rate: Rate,
+    benchmark: z.number(),
+    trialsStarted: Count,
+    trialsActive: Count,
+    trialsOver: Count,
+    paid: Count,
+  }),
+  usage: z.object({
+    parents: Count,
+    learners: Count,
+    // Learners who finished a lesson in the last 7 days.
+    activeLearners: Count,
+    plans: Count,
+    lessonsDone: Count,
+    averageScore: Rate,
+    replans: z.object({ struggling: Count, excelling: Count }),
+  }),
+  // Model calls from llm_call over the last windowDays days.
+  ai: z.object({
+    windowDays: Count,
+    calls: Count,
+    failed: Count,
+    inputTokens: Count,
+    outputTokens: Count,
+    // Against the server's DAILY_LLM_CALL_LIMIT.
+    callsLast24h: Count,
+    dailyLimit: Count,
+    // One row per task and model, most calls first.
+    byTask: z.array(
+      z.object({
+        task: z.string(),
+        model: z.string(),
+        calls: Count,
+        failed: Count,
+        medianLatencyMs: Count,
+        p95LatencyMs: Count,
+        inputTokens: Count,
+        outputTokens: Count,
+      }),
+    ),
+    // Every day of the window, oldest first (UTC days, YYYY-MM-DD).
+    byDay: z.array(z.object({ day: z.string(), calls: Count, failed: Count })),
+    // Lesson content by state, all time.
+    lessons: z.object({ ready: Count, failed: Count, waiting: Count }),
+  }),
+});
+export type AdminAnalyticsResponse = z.infer<typeof AdminAnalyticsResponse>;

@@ -333,3 +333,34 @@ export const Curriculum = z.object({
   replanEvents: z.array(ReplanEvent),
 });
 export type Curriculum = z.infer<typeof Curriculum>;
+
+// --- Subscriptions ----------------------------------------------------------
+
+// Every account starts with a free trial of this many days.
+export const TRIAL_DAYS = 7;
+
+export const BillingPlan = z.enum(["yearly", "monthly"]);
+export type BillingPlan = z.infer<typeof BillingPlan>;
+
+// A parent account's trial and payment state. One per account.
+export const Subscription = z.object({
+  plan: BillingPlan,
+  trialStartedAt: z.string().datetime(),
+  trialEndsAt: z.string().datetime(),
+  // When the first payment went through; null while on trial or after a
+  // trial that ended without paying.
+  paidAt: z.string().datetime().nullable(),
+});
+export type Subscription = z.infer<typeof Subscription>;
+
+// --- Product metrics --------------------------------------------------------
+
+// The key MVP metric. Recovery rate: of the retry lessons children took, the
+// share they passed. A retry exists for each lesson failed (scored below
+// STRUGGLING_BELOW) in a "struggling" replan window, and comes after the
+// remedial lessons; it is passed at STRUGGLING_BELOW or above.
+export const RECOVERY_TARGET = 0.6;
+// Guardrail: a learner should finish this many lessons in their first 7 days.
+export const WEEK_ONE_LESSONS = 3;
+// Guardrail: trial-to-paid conversion, compared with the industry median.
+export const TRIAL_TO_PAID_BENCHMARK = 0.35;
