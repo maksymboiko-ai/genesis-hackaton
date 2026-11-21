@@ -30,6 +30,8 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      # Route types (LayoutProps and friends) are generated, not committed.
+      - run: npx next typegen
       - run: npm run typecheck
       - run: npm test
       # Builds without secrets: server env is read lazily (lib/server/env.ts).
