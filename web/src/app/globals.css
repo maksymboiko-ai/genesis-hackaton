@@ -314,6 +314,12 @@ body {
   background: #fff;
   color: var(--text);
 }
+/* The paywall's call to action: yellow stands out on every subject colour. */
+.btn.sun,
+.btn.sun[aria-busy='true'] {
+  background: var(--sun);
+  color: var(--text);
+}
 
 .ib {
   width: 44px;
@@ -442,6 +448,16 @@ textarea.in {
   border-color: var(--math);
   background: var(--math);
   color: #fff;
+}
+/* On the paywall the chosen plan takes the plan's subject colour. */
+.paywall .opt.on {
+  border-color: var(--s);
+  box-shadow: inset 0 0 0 0.5px var(--s);
+  background: var(--s-tint);
+}
+.paywall .opt.on .rd {
+  border-color: var(--s);
+  background: var(--s);
 }
 .opt.on .rd svg,
 .opt.on .cb svg {

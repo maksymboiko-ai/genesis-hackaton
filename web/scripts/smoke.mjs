@@ -59,6 +59,15 @@ check(created.status === 201 && created.body.status === "created", "curriculum c
 const curriculum = created.body.curriculum;
 check(curriculum.lessons.every((l) => Number.isInteger(l.estimatedMinutes) && l.estimatedMinutes > 0), "every lesson has estimated minutes");
 
+// Without a trial only the first lesson is open.
+check(curriculum.lessons.every((l, i) => l.locked === i > 0), "lessons after the first are locked before the trial");
+const lockedLesson = await api("GET", `/api/lessons/${curriculum.lessons[1].id}`);
+check(lockedLesson.status === 200 && lockedLesson.body.locked && lockedLesson.body.content === null, "a locked lesson has no content");
+const trial = await api("POST", "/api/subscription", { plan: "yearly" });
+check(trial.status === 201 && Date.parse(trial.body.trialEndsAt) > Date.now(), "trial started");
+const unlocked = await api("GET", `/api/curricula/${curriculum.id}`);
+check(unlocked.body.lessons.every((l) => !l.locked), "the trial opens every lesson");
+
 async function doLesson(lessonId, correct) {
   const lesson = await poll(() => api("GET", `/api/lessons/${lessonId}`), (r) => ["ready", "failed"].includes(r.body.contentStatus));
   check(lesson.body.contentStatus === "ready", `lesson ${lessonId.slice(0, 8)} ready (background generation)`);

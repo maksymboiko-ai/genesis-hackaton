@@ -6,6 +6,7 @@ import {
   type LessonSummary,
   type ReplanEvent,
 } from "@/contracts/domain";
+import { lessonLocked } from "@/lib/access";
 import type { CurriculumRow, LessonRow, ReplanEventRow } from "./store/types";
 
 // Store rows → contract shapes. Responses are parsed through the contract
@@ -23,7 +24,8 @@ function questionCount(row: LessonRow): number | null {
   return Array.isArray(questions) && questions.length > 0 ? questions.length : null;
 }
 
-export function toLessonSummary(row: LessonRow): LessonSummary {
+/** `fullAccess`: the account has a running trial or has paid (see lib/access.ts). */
+export function toLessonSummary(row: LessonRow, fullAccess: boolean): LessonSummary {
   return {
     id: row.id,
     curriculumId: row.curriculumId,
@@ -39,6 +41,7 @@ export function toLessonSummary(row: LessonRow): LessonSummary {
     questionCount: questionCount(row),
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     lastScore: row.lastScore,
+    locked: lessonLocked(row.position, fullAccess),
   };
 }
 
@@ -66,10 +69,15 @@ export function toCurriculumListItem(row: CurriculumRow): Omit<Curriculum, "less
   };
 }
 
-export function toCurriculum(row: CurriculumRow, lessons: LessonRow[], events: ReplanEventRow[]): Curriculum {
+export function toCurriculum(
+  row: CurriculumRow,
+  lessons: LessonRow[],
+  events: ReplanEventRow[],
+  fullAccess: boolean,
+): Curriculum {
   return {
     ...toCurriculumListItem(row),
-    lessons: lessons.map(toLessonSummary),
+    lessons: lessons.map((lesson) => toLessonSummary(lesson, fullAccess)),
     replanEvents: events.map(toReplanEvent),
   };
 }

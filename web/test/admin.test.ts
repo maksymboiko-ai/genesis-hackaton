@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET as analytics } from "@/app/api/admin/analytics/route";
 import { GET as getLesson } from "@/app/api/lessons/[lessonId]/route";
 import { POST as startTrial } from "@/app/api/subscription/route";
@@ -333,6 +333,11 @@ describe("metric arithmetic", () => {
 });
 
 describe("POST /api/subscription", () => {
+  // These tests count subscriptions: start without the default trial.
+  beforeEach(() => {
+    memory().data.subscriptions.length = 0;
+  });
+
   it("starts a trial of TRIAL_DAYS on the chosen plan", async () => {
     const before = Date.now();
     const res = await trial({ plan: "monthly" });

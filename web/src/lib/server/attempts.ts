@@ -1,14 +1,16 @@
 import "server-only";
 import type { SubmitAttemptRequest, SubmitAttemptResponse } from "@/contracts/api";
+import { lessonLocked } from "@/lib/access";
 import { ownedLesson } from "./access";
 import type { AuthUser } from "./auth";
-import { conflict } from "./errors";
+import { conflict, paymentRequired } from "./errors";
 import { attemptFeedback } from "./feedback";
 import { gradeAttempt, nextMastery, skillScores } from "./grading";
 import { readContent } from "./lessons";
 import { maybeStartReplan, startLearnerNotesRefresh } from "./replan";
 import { getStore } from "./store";
 import { recordActivity } from "./streak";
+import { fullAccess } from "./subscription";
 
 /**
  * POST /lessons/:id/attempts. Grades in code, stores the attempt, completes
@@ -22,6 +24,7 @@ export async function submitAttempt(
 ): Promise<SubmitAttemptResponse> {
   const store = getStore();
   const { lesson, curriculum, child } = await ownedLesson(user, lessonId);
+  if (lessonLocked(lesson.position, await fullAccess(user))) throw paymentRequired();
   const content = readContent(lesson);
   if (!content) throw conflict("The lesson is not ready yet.");
 

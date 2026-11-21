@@ -24,7 +24,8 @@ import {
 export const ApiError = z.object({
   error: z.object({
     // unauthorized: no valid session (401), or a cross-site request (403).
-    code: z.enum(["bad_request", "unauthorized", "not_found", "conflict", "internal"]),
+    // payment_required: the lesson is locked for this account (402).
+    code: z.enum(["bad_request", "unauthorized", "payment_required", "not_found", "conflict", "internal"]),
     message: z.string(),
   }),
 });
@@ -182,6 +183,8 @@ export type PublicQuestion = z.infer<typeof PublicQuestion>;
 // GET /lessons/:lessonId
 // If the content is "pending" this call starts generation. Poll until
 // contentStatus is "ready" (content is non-null) or "failed".
+// A locked lesson (locked: true) answers with content null and starts
+// nothing: send the parent to the paywall instead of polling.
 export const GetLessonResponse = LessonSummary.extend({
   contentStatus: ContentStatus,
   content: z
@@ -204,10 +207,12 @@ export type GetLessonResponse = z.infer<typeof GetLessonResponse>;
 // generation again at once. (A GET retries a failed lesson only a minute
 // after the failure, so polling never loops on paid retries.) A lesson that
 // is ready or still generating is returned as it is. No body.
+// "payment_required" (402) for a locked lesson.
 export const RetryLessonResponse = GetLessonResponse;
 
 // POST /lessons/:lessonId/attempts
 // Every question must be answered exactly once.
+// "payment_required" (402) for a locked lesson.
 export const SubmitAttemptRequest = z.object({
   answers: z
     .array(
@@ -237,6 +242,14 @@ export const SubmitAttemptResponse = z.object({
 export type SubmitAttemptResponse = z.infer<typeof SubmitAttemptResponse>;
 
 // --- Subscription -----------------------------------------------------------
+// An account with a running trial or a payment opens every lesson. Any other
+// account opens the first FREE_LESSONS_PER_PLAN lessons of each plan; the
+// rest come back with locked: true.
+
+// GET /subscription
+// The account's trial and payment state; null before a trial was started.
+export const GetSubscriptionResponse = z.object({ subscription: Subscription.nullable() });
+export type GetSubscriptionResponse = z.infer<typeof GetSubscriptionResponse>;
 
 // POST /subscription
 // "Start free trial" on the paywall: starts the account's TRIAL_DAYS trial on

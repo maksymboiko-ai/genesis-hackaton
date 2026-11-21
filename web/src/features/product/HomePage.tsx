@@ -385,7 +385,7 @@ function ParentsTab({
 
       {building && <Building subject={building} />}
 
-      <div className="grid gap-[18px] lg:grid-cols-[1.2fr_1fr] lg:items-start lg:gap-6">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-[18px] lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start lg:gap-6">
         <section className="cardx px-4 py-3.5 md:px-5 md:py-[18px] lg:order-2" aria-labelledby="changed-title">
           <h2 id="changed-title" className="mb-1 text-[17px] font-extrabold md:text-[19px]">
             What changed

@@ -1,7 +1,13 @@
-import { StartTrialRequest, StartTrialResponse } from "@/contracts/api";
+import { GetSubscriptionResponse, StartTrialRequest, StartTrialResponse } from "@/contracts/api";
 import { ok, parseJson, route } from "@/lib/server/http";
 import { LIMITS } from "@/lib/server/rate-limit";
-import { startTrial } from "@/lib/server/subscription";
+import { getSubscription, startTrial } from "@/lib/server/subscription";
+
+// GET /api/subscription: the account's trial and payment state.
+export const GET = route(
+  async (_req: Request, _ctx, user) => ok(GetSubscriptionResponse, await getSubscription(user)),
+  { limit: LIMITS.read },
+);
 
 // POST /api/subscription: starts the account's free trial.
 export const POST = route(

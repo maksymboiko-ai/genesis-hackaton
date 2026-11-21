@@ -601,6 +601,16 @@ export class SupabaseStore implements Store {
     return count ?? 0;
   }
 
+  async getSubscription(ownerId: string) {
+    const { data, error } = await this.db
+      .from("subscription")
+      .select(SUBSCRIPTION_COLUMNS)
+      .eq("owner_id", ownerId)
+      .maybeSingle();
+    check(error, "get subscription");
+    return data ? toSubscription(data as SubscriptionDb) : null;
+  }
+
   async startTrial(input: { ownerId: string; plan: "yearly" | "monthly"; trialEndsAtIso: string }) {
     // Insert unless the account has a row already; then read what is stored.
     const { error: e1 } = await this.db

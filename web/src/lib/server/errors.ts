@@ -6,7 +6,7 @@ type Code = ApiError["error"]["code"];
 // Errors a service may throw on purpose. Anything else becomes a generic 500.
 export class HttpError extends Error {
   constructor(
-    public readonly status: 400 | 401 | 403 | 404 | 409 | 413 | 415 | 429 | 502 | 503,
+    public readonly status: 400 | 401 | 402 | 403 | 404 | 409 | 413 | 415 | 429 | 502 | 503,
     public readonly code: Code,
     message: string,
   ) {
@@ -18,6 +18,8 @@ export class HttpError extends Error {
 export const badRequest = (message = "The request is not valid.") =>
   new HttpError(400, "bad_request", message);
 export const unauthorized = (message = "Sign in to continue.") => new HttpError(401, "unauthorized", message);
+export const paymentRequired = (message = "Start the free trial to open this lesson.") =>
+  new HttpError(402, "payment_required", message);
 export const crossSite = () => new HttpError(403, "unauthorized", "Cross-site requests are not allowed.");
 export const notFound = (what = "Resource") => new HttpError(404, "not_found", `${what} not found.`);
 export const conflict = (message: string) => new HttpError(409, "conflict", message);

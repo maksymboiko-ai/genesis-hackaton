@@ -1,7 +1,7 @@
 'use client'
 
 import { Mascot } from '@/components/Mascot'
-import { Check, ChevronLeft } from 'lucide-react'
+import { Check, ChevronLeft, Lock } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -11,6 +11,7 @@ import { SubjectTile } from '@/components/SubjectTile'
 import type { GetLessonResponse, SubmitAttemptResponse } from '@/contracts/api'
 import type { Curriculum, LessonBlock } from '@/contracts/domain'
 import { api } from '@/lib/api'
+import { PRICING } from '@/lib/config'
 import { SUBJECTS, subjectKey, subjectLabel } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import { LessonBody } from './LessonBody'
@@ -22,8 +23,9 @@ import './lesson.css'
 const STAGES = ['Matching your level', 'Building the worked examples', 'Drawing the figures', 'Writing the questions']
 const STAGE_MS = 2600
 
+// A locked lesson is never written for this account: nothing to wait for.
 const isPreparing = (lesson: GetLessonResponse) =>
-  lesson.contentStatus === 'pending' || lesson.contentStatus === 'generating'
+  !lesson.locked && (lesson.contentStatus === 'pending' || lesson.contentStatus === 'generating')
 const isReplanning = (curriculum: Curriculum) => curriculum.replanStatus === 'running'
 
 export function LessonPage() {
@@ -107,6 +109,30 @@ function Lesson({ lessonId }: { lessonId: string }) {
   }
 
   if (!lesson || (!curriculum && !curriculumResource.error)) return <LoadingShell />
+
+  if (lesson.locked) {
+    return (
+      <div className="a-rise mx-auto flex w-full max-w-[680px] flex-col items-start gap-4 pt-4">
+        <span className="k">
+          <Lock size={13} strokeWidth={2.8} aria-hidden="true" />
+          {lessonNumber ? `Lesson ${lessonNumber} · Locked` : 'Locked'}
+        </span>
+        <h1 className="q text-[30px]! md:text-[40px]!">{lesson.title}</h1>
+        <p className="sub">{lesson.objective}</p>
+        <p className="m-0 text-base leading-normal font-medium">
+          This lesson opens with the {PRICING.trial} free trial, along with the rest of the plan.
+        </p>
+        <div className="flex w-full flex-col gap-2 md:flex-row">
+          <Link href={`/paywall?plan=${lesson.curriculumId}`} className="btn">
+            See the plans
+          </Link>
+          <Link href={planHref} className="btn q">
+            Back to the plan
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`${SUBJECTS[subject].className}`}>
