@@ -11,6 +11,7 @@ import {
 import { getAi } from "./ai";
 import { buildLearnerProfile, knownSkillsOf, requireChild } from "./children";
 import { badRequest, conflict, notFound, upstream } from "./errors";
+import { startLessonGeneration } from "./lessons";
 import { toCurriculum, toCurriculumListItem } from "./mappers";
 import { getStore } from "./store";
 import type { NewLesson } from "./store/types";
@@ -116,6 +117,8 @@ export async function createCurriculum(body: CreateCurriculumRequest): Promise<C
     title: outline.title,
     lessons: outline.lessons,
   });
+  const [first] = await store.listLessons(id);
+  if (first) await startLessonGeneration(first.id);
   return { status: "created", curriculum: await getCurriculum(id) };
 }
 

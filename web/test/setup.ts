@@ -1,4 +1,5 @@
 import { afterEach, beforeEach } from "vitest";
+import { flushBackground } from "@/lib/server/background";
 import { resetEnvForTests } from "@/lib/server/env";
 import { resetRateLimitsForTests } from "@/lib/server/rate-limit";
 import { setStoreForTests } from "@/lib/server/store";
@@ -13,6 +14,7 @@ beforeEach(() => {
   setStoreForTests(new MemoryStore());
 });
 
-afterEach(() => {
+afterEach(async () => {
+  await flushBackground();
   setStoreForTests(undefined);
 });

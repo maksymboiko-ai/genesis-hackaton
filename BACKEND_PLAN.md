@@ -164,15 +164,15 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 |---|---|---|---|---|
 | F1 | children + profile | M1 | ✅ | name trimmed, 1–100 chars, control chars stripped; profile never carries the name |
 | F2 | books + ingestion | M6 | ❌ | — |
-| F3 | create curriculum + clarification | M2 | ✅ | one clarification round enforced; outline bounded (≤ 12 lessons, ≤ 5 slugs each, section index checked); `create_curriculum` RPC; first-lesson kick-off lands with M3 |
+| F3 | create curriculum + clarification | M2 | ✅ | one clarification round enforced; outline bounded (≤ 12 lessons, ≤ 5 slugs each, section index checked); `create_curriculum` RPC; first lesson claimed before the response |
 | F4 | list/get curricula | M2 | ✅ | list newest first; unknown child → 404 |
-| F5 | lesson generation + retrieval | M3 | ❌ | — |
+| F5 | lesson generation + retrieval | M3 | ✅ | `claim_lesson` RPC; next pending lesson prefetched in the same job; content bounded (≤ 10 questions, 4 choices, slugs, markdown sanitized); answers stripped by `GetLessonResponse` |
 | F6 | attempts, grading, mastery | M4 | ❌ | — |
 | F7 | replan | M5 | ❌ | — |
 | F8 | learner notes | M5 | ❌ | — |
 | F9 | llm_call logging | M0 | ✅ | `lib/server/ai.ts` wraps every `AiService` call: `onCall` → `llm_call`, fire-and-forget |
 | F10 | security baseline | M0–M7 | 🟡 | M0: Zod helpers, 64 KB body cap, error envelope, rate limiter, daily budget, `server-only`, env check |
-| F11 | claims, failure reset, stuck recovery | M3, M5 | ❌ | — |
+| F11 | claims, failure reset, stuck recovery | M3, M5 | 🟡 | lessons done: stale `generating` reclaimed after 3 min, `failed` retried on open after a 60 s cooldown; replan part in M5 |
 | F12 | fake/real AiService switch | M0, M7 | 🟡 | `AI_MODE=fake\|real`; fake done (M0), real wiring in M7 |
 
 ### Modules
@@ -182,7 +182,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | M0 Foundation | ✅ | ✅ 15 tests | ✅ | ✅ |
 | M1 Children | ✅ | ✅ 6 tests | ✅ | ✅ |
 | M2 Curricula | ✅ | ✅ 9 tests + SQL test | ✅ | ✅ |
-| M3 Lessons | ❌ | ❌ | ❌ | ❌ |
+| M3 Lessons | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M4 Attempts | ❌ | ❌ | ❌ | ❌ |
 | M5 Replan | ❌ | ❌ | ❌ | ❌ |
 | M6 Books | ❌ | ❌ | ❌ | ❌ |
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 13:40 | M3 | A `failed` lesson was reclaimed on every poll: the UI never saw `failed` and a model outage meant endless paid retries → 60 s retry cooldown in `claim_lesson` | — |
 | 13:35 | M2 | Model returning questions after answers would loop → now a 502; book with a broken section map → 500 instead of a bad plan | — |
 | 13:32 | M1 | Long names were silently truncated → now rejected with 400 above 100 chars | — |
 
@@ -205,6 +206,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **Store layer.** Services talk to a `Store` interface (`lib/server/store/`) with two implementations: `SupabaseStore` (production) and `MemoryStore` (tests and `STORE=memory` local runs without a database). This is what makes every route testable without Supabase.
 - **`vitest@3`**, not 4: vitest 4 needs `@types/node` ≥ 22 and the app pins `^20`.
 - `GET /api/health` stays as a deploy check.
+- **Failed lessons.** Not in the original plan: opening a `failed` lesson retries it, but only 60 s after the failed attempt.
 - **SQL tests.** `supabase/tests/0003_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 
 ## 5. Open questions

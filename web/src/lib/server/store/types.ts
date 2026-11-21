@@ -84,6 +84,8 @@ export type NewLesson = {
   bookSectionIndex: number | null;
 };
 
+export type ChunkHit = { chunkIndex: number; content: string };
+
 export interface Store {
   /** Cheap connectivity check. */
   ping(): Promise<void>;
@@ -115,6 +117,25 @@ export interface Store {
   listLessons(curriculumId: string): Promise<LessonRow[]>;
   /** Oldest first. */
   listReplanEvents(curriculumId: string): Promise<ReplanEventRow[]>;
+
+  getLesson(id: string): Promise<LessonRow | null>;
+  /**
+   * Moves a lesson to 'generating' if it is pending, failed since before
+   * retryBeforeIso, or generating since before staleBeforeIso. True only for
+   * the caller that claimed it.
+   */
+  claimLesson(id: string, staleBeforeIso: string, retryBeforeIso: string): Promise<boolean>;
+  /** Stores content and marks ready; only from 'generating'. */
+  saveLessonContent(id: string, content: unknown): Promise<void>;
+  /** Marks failed; only from 'generating'. */
+  failLesson(id: string): Promise<void>;
+
+  // --- book_chunk ---
+  countChunks(bookId: string, sectionIndex: number): Promise<number>;
+  /** Chunks of one section in reading order. */
+  listChunks(bookId: string, sectionIndex: number, limit: number): Promise<ChunkHit[]>;
+  /** Nearest chunks by cosine distance, optionally inside one section. */
+  matchChunks(bookId: string, embedding: number[], limit: number, sectionIndex: number | null): Promise<ChunkHit[]>;
 
   // --- llm_call ---
   insertLlmCall(record: LlmCallRecord): Promise<void>;

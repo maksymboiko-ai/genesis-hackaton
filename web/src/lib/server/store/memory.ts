@@ -2,6 +2,7 @@ import "server-only";
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
   BookRow,
+  ChunkHit,
   ChildRow,
   CurriculumRow,
   LessonRow,
@@ -20,11 +21,26 @@ export type MemoryData = {
   curricula: CurriculumRow[];
   lessons: LessonRow[];
   replanEvents: ReplanEventRow[];
+  chunks: ChunkRow[];
   llmCalls: LlmCallRow[];
 };
 
+export type ChunkRow = { bookId: string; chunkIndex: number; content: string; sectionIndex: number; embedding: number[] };
+
+function cosine(a: number[], b: number[]): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  return na && nb ? dot / Math.sqrt(na * nb) : 0;
+}
+
 export function emptyData(): MemoryData {
-  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], llmCalls: [] };
+  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], llmCalls: [] };
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -154,6 +170,58 @@ export class MemoryStore implements Store {
         .filter((e) => e.curriculumId === curriculumId)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     );
+  }
+
+  async getLesson(id: string) {
+    const row = this.data.lessons.find((l) => l.id === id);
+    return row ? copy(row) : null;
+  }
+
+  async claimLesson(id: string, staleBeforeIso: string, retryBeforeIso: string) {
+    const row = this.data.lessons.find((l) => l.id === id);
+    if (!row) return false;
+    const started = row.generationStartedAt;
+    const ok =
+      row.contentStatus === "pending" ||
+      (row.contentStatus === "failed" && (!started || started < retryBeforeIso)) ||
+      (row.contentStatus === "generating" && (!started || started < staleBeforeIso));
+    if (!ok) return false;
+    row.contentStatus = "generating";
+    row.generationStartedAt = now();
+    return true;
+  }
+
+  async saveLessonContent(id: string, content: unknown) {
+    const row = this.data.lessons.find((l) => l.id === id && l.contentStatus === "generating");
+    if (!row) return;
+    row.content = copy(content);
+    row.contentStatus = "ready";
+  }
+
+  async failLesson(id: string) {
+    const row = this.data.lessons.find((l) => l.id === id && l.contentStatus === "generating");
+    if (row) row.contentStatus = "failed";
+  }
+
+  async countChunks(bookId: string, sectionIndex: number) {
+    return this.data.chunks.filter((c) => c.bookId === bookId && c.sectionIndex === sectionIndex).length;
+  }
+
+  async listChunks(bookId: string, sectionIndex: number, limit: number): Promise<ChunkHit[]> {
+    return this.data.chunks
+      .filter((c) => c.bookId === bookId && c.sectionIndex === sectionIndex)
+      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+      .slice(0, limit)
+      .map((c) => ({ chunkIndex: c.chunkIndex, content: c.content }));
+  }
+
+  async matchChunks(bookId: string, embedding: number[], limit: number, sectionIndex: number | null) {
+    return this.data.chunks
+      .filter((c) => c.bookId === bookId && (sectionIndex === null || c.sectionIndex === sectionIndex))
+      .map((c) => ({ c, score: cosine(c.embedding, embedding) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ c }) => ({ chunkIndex: c.chunkIndex, content: c.content }));
   }
 
   async insertLlmCall(record: LlmCallRecord) {

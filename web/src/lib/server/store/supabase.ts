@@ -3,6 +3,7 @@ import { createClient, type PostgrestError, type SupabaseClient } from "@supabas
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
   BookRow,
+  ChunkHit,
   ChildRow,
   CurriculumRow,
   LessonRow,
@@ -240,6 +241,73 @@ export class SupabaseStore implements Store {
       .order("created_at");
     check(error, "list replan_event");
     return (data as ReplanEventDb[]).map(toReplanEvent);
+  }
+
+  async getLesson(id: string) {
+    const { data, error } = await this.db.from("lesson").select(LESSON_COLUMNS).eq("id", id).maybeSingle();
+    check(error, "get lesson");
+    return data ? toLesson(data as LessonDb) : null;
+  }
+
+  async claimLesson(id: string, staleBeforeIso: string, retryBeforeIso: string) {
+    const { data, error } = await this.db.rpc("claim_lesson", {
+      p_lesson_id: id,
+      p_stale_before: staleBeforeIso,
+      p_retry_before: retryBeforeIso,
+    });
+    check(error, "claim_lesson");
+    return data === true;
+  }
+
+  async saveLessonContent(id: string, content: unknown) {
+    const { error } = await this.db
+      .from("lesson")
+      .update({ content, content_status: "ready" })
+      .eq("id", id)
+      .eq("content_status", "generating");
+    check(error, "save lesson content");
+  }
+
+  async failLesson(id: string) {
+    const { error } = await this.db
+      .from("lesson")
+      .update({ content_status: "failed" })
+      .eq("id", id)
+      .eq("content_status", "generating");
+    check(error, "fail lesson");
+  }
+
+  async countChunks(bookId: string, sectionIndex: number) {
+    const { count, error } = await this.db
+      .from("book_chunk")
+      .select("id", { count: "exact", head: true })
+      .eq("book_id", bookId)
+      .eq("section_index", sectionIndex);
+    check(error, "count book_chunk");
+    return count ?? 0;
+  }
+
+  async listChunks(bookId: string, sectionIndex: number, limit: number): Promise<ChunkHit[]> {
+    const { data, error } = await this.db
+      .from("book_chunk")
+      .select("chunk_index, content")
+      .eq("book_id", bookId)
+      .eq("section_index", sectionIndex)
+      .order("chunk_index")
+      .limit(limit);
+    check(error, "list book_chunk");
+    return (data as { chunk_index: number; content: string }[]).map((r) => ({ chunkIndex: r.chunk_index, content: r.content }));
+  }
+
+  async matchChunks(bookId: string, embedding: number[], limit: number, sectionIndex: number | null) {
+    const { data, error } = await this.db.rpc("match_book_chunks", {
+      p_book_id: bookId,
+      p_embedding: embedding,
+      p_limit: limit,
+      p_section_index: sectionIndex,
+    });
+    check(error, "match_book_chunks");
+    return (data as { chunk_index: number; content: string }[]).map((r) => ({ chunkIndex: r.chunk_index, content: r.content }));
   }
 
   async insertLlmCall(r: LlmCallRecord) {

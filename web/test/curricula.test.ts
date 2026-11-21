@@ -74,7 +74,9 @@ describe("POST /api/curricula", () => {
     const parsed = CreateCurriculumResponse.parse(second.body);
     if (parsed.status !== "created") throw new Error("expected created");
     expect(parsed.curriculum.lessons.map((l) => l.position)).toEqual([0, 1, 2, 3]);
-    expect(parsed.curriculum.lessons.every((l) => l.contentStatus === "pending" && l.kind === "core")).toBe(true);
+    expect(parsed.curriculum.lessons.every((l) => l.kind === "core")).toBe(true);
+    // Lesson 1 is claimed for background generation before the response.
+    expect(parsed.curriculum.lessons.map((l) => l.contentStatus)).toEqual(["generating", "pending", "pending", "pending"]);
     expect(parsed.curriculum.replanStatus).toBe("idle");
   });
 

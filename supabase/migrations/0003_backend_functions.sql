@@ -47,3 +47,27 @@ begin
   return v_id;
 end;
 $$;
+
+-- Claims a lesson for generation. True only for the one caller that moved it
+-- to 'generating': from 'pending'; from 'failed' if the failed attempt started
+-- before p_retry_before (a cooldown, so polling a failed lesson does not
+-- retry it in a loop); or from a 'generating' job that started before
+-- p_stale_before (a dead job).
+create function claim_lesson(p_lesson_id uuid, p_stale_before timestamptz, p_retry_before timestamptz)
+returns boolean
+language sql
+as $$
+  with claimed as (
+    update lesson
+       set content_status = 'generating',
+           generation_started_at = now()
+     where id = p_lesson_id
+       and (content_status = 'pending'
+            or (content_status = 'failed'
+                and (generation_started_at is null or generation_started_at < p_retry_before))
+            or (content_status = 'generating'
+                and (generation_started_at is null or generation_started_at < p_stale_before)))
+    returning 1
+  )
+  select exists (select 1 from claimed);
+$$;
