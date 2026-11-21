@@ -2,7 +2,7 @@
 
 A children's learning app. A parent or child describes a goal ("my child got a B in algebra"), and the app builds a curriculum that repairs itself as the child learns, adapts to the child across subjects, and can ground its lessons in an uploaded textbook.
 
-Three people build it: **Frontend**, **Backend** and **AI**. This document and the files in [contracts/](contracts/) define where one person's work ends and the next begins. If something you need is not in a contract, change the contract first (see [Changing a contract](#changing-a-contract)).
+Three people build it: **Frontend**, **Backend** and **AI**. This document and the files in [web/src/contracts/](web/src/contracts/) define where one person's work ends and the next begins. If something you need is not in a contract, change the contract first (see [Changing a contract](#changing-a-contract)).
 
 ## Stack
 
@@ -19,8 +19,8 @@ Three people build it: **Frontend**, **Backend** and **AI**. This document and t
 ```mermaid
 flowchart LR
   subgraph FE["Frontend (owner: Frontend)"]
-    UI["Pages and components<br/>app/, components/"]
-    Client["Typed API client<br/>lib/api-client.ts"]
+    UI["Pages and components<br/>app/, features/, components/"]
+    Client["Typed API client<br/>lib/api.ts"]
   end
 
   subgraph BE["Backend (owner: Backend)"]
@@ -30,7 +30,7 @@ flowchart LR
 
   subgraph AI["AI module (owner: AI)"]
     AiSvc["AiService<br/>lib/ai/"]
-    Evals["Evals<br/>evals/"]
+    Evals["Evals<br/>web/evals/"]
   end
 
   DB[("Supabase<br/>Postgres + pgvector + storage")]
@@ -49,18 +49,18 @@ There are three boundaries, and each has one contract file:
 
 | Boundary | Contract | What it fixes |
 |---|---|---|
-| Frontend to Backend | [contracts/api.ts](contracts/api.ts) | Every endpoint's request and response |
-| Backend to AI | [contracts/ai.ts](contracts/ai.ts) | The `AiService` interface and the shapes models must produce |
+| Frontend to Backend | [web/src/contracts/api.ts](web/src/contracts/api.ts) | Every endpoint's request and response |
+| Backend to AI | [web/src/contracts/ai.ts](web/src/contracts/ai.ts) | The `AiService` interface and the shapes models must produce |
 | Backend to Database | [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql) | Tables, columns, allowed values |
 
-[contracts/domain.ts](contracts/domain.ts) holds the vocabulary all three share: entity shapes, enum values and the tuning constants.
+[web/src/contracts/domain.ts](web/src/contracts/domain.ts) holds the vocabulary all three share: entity shapes, enum values and the tuning constants.
 
 ## Ownership
 
 | | Frontend | Backend | AI |
 |---|---|---|---|
-| Owns | `app/` (except `app/api/`), `components/`, `lib/api-client.ts` | `app/api/`, `lib/server/`, `supabase/` | `lib/ai/`, `evals/` |
-| Builds against | `contracts/api.ts` | all three contracts | `contracts/ai.ts` |
+| Owns | `app/` (except `app/api/`), `features/`, `components/`, `lib/api.ts` | `app/api/`, `lib/server/`, `supabase/` | `lib/ai/`, `web/evals/` |
+| Builds against | `web/src/contracts/api.ts` | all three contracts | `web/src/contracts/ai.ts` |
 | Never touches | the database, `lib/ai/` | prompts, model choice | the database, HTTP routes |
 
 Rules that keep the parts fitting together:
@@ -73,7 +73,7 @@ Rules that keep the parts fitting together:
 
 ### Working in parallel from day one
 
-- **Frontend** builds against mock responses that satisfy the schemas in `contracts/api.ts`.
+- **Frontend** builds against mock responses that satisfy the schemas in `web/src/contracts/api.ts`.
 - **Backend** builds against a fake `AiService` that returns canned objects.
 - **AI** builds and evaluates `lib/ai/` with fixture inputs, with no backend running.
 
@@ -174,32 +174,35 @@ To stop skill names drifting ("linear-equations" and "solving-linear-equations")
 
 - All model calls go through one OpenRouter client in `lib/ai/`.
 - `lib/ai/models.ts` maps each task (`outline`, `lesson`, `replan`, `learner_notes`) to a default model. Every `AiService` function accepts a `model` override.
-- Structured output uses `response_format` with `type: "json_schema"` and `strict: true`, generated from the Zod schemas in `contracts/ai.ts`. Requests set `provider.require_parameters: true` so OpenRouter only routes to endpoints that support it.
+- Structured output uses `response_format` with `type: "json_schema"` and `strict: true`, generated from the Zod schemas in `web/src/contracts/ai.ts`. Requests set `provider.require_parameters: true` so OpenRouter only routes to endpoints that support it.
 - Enforcement differs between providers, so every response is still parsed with Zod. On failure the function retries once, then throws.
 - Model-facing schemas stay plain (no optional fields, no length or range limits) so they work across providers. Counts and ranges are checked in code.
-- Evals in `evals/` call the same `AiService` functions over fixture inputs, once per candidate model, and compare schema pass rate, latency, token use and output quality. The `onCall` hook reports each call; in production the backend writes those records to `llm_call`.
+- Evals in `web/evals/` call the same `AiService` functions over fixture inputs, once per candidate model, and compare schema pass rate, latency, token use and output quality. The `onCall` hook reports each call; in production the backend writes those records to `llm_call`.
 
 ## Repository layout
 
+The Next.js app lives in `web/`. Paths in this document such as `app/api/` and `lib/ai/` are relative to `web/src/`, and are imported with the `@/` alias (for example `@/contracts/api`).
+
 ```
-app/                    pages                       Frontend
-app/api/                route handlers              Backend
-components/             UI components               Frontend
-lib/api-client.ts       typed fetch wrapper         Frontend
-lib/server/             services, database access   Backend
-lib/ai/                 AiService implementation    AI
-evals/                  eval scripts and fixtures   AI
-contracts/              shared contracts            everyone
+web/src/app/            pages                       Frontend
+web/src/app/api/        route handlers              Backend
+web/src/features/       page-level UI               Frontend
+web/src/components/     shared UI components        Frontend
+web/src/lib/api.ts      typed API client            Frontend
+web/src/lib/server/     services, database access   Backend
+web/src/lib/ai/         AiService implementation    AI
+web/src/contracts/      shared contracts            everyone
+web/evals/              eval scripts and fixtures   AI
 supabase/migrations/    database schema             Backend
 ```
 
 ## Changing a contract
 
-A change to anything in `contracts/` or `supabase/migrations/` goes in its own pull request, separate from feature work, and is approved by the owner on each side of the boundary it touches before anyone builds on it. Schema changes are new migration files; `0001_init.sql` is not edited once it has been applied to the shared database.
+A change to anything in `web/src/contracts/` or `supabase/migrations/` goes in its own pull request, separate from feature work, and is approved by the owner on each side of the boundary it touches before anyone builds on it. Schema changes are new migration files; `0001_init.sql` is not edited once it has been applied to the shared database.
 
 ## Out of scope for the MVP
 
-- **Accounts and login.** There is no auth. The app shows a child picker.
+- **Real accounts.** The sign-up screen is a mock. The backend has no auth and the app shows a child picker.
 - **Row-level security.** All database access is server-side with the service role key.
 - **Streaming lesson text.** Lessons are generated ahead of time and fetched by polling.
 - **Free-text answers.** Quizzes are multiple choice with 4 options, graded in code.

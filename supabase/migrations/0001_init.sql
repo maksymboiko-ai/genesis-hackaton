@@ -1,4 +1,4 @@
--- Database contract. Names and enum values mirror contracts/domain.ts.
+-- Database contract. Names and enum values mirror web/src/contracts/domain.ts.
 -- All access goes through the Next.js server with the service role key;
 -- the browser never talks to the database.
 
@@ -27,7 +27,7 @@ create table book_chunk (
   book_id     uuid not null references book(id) on delete cascade,
   chunk_index int  not null,
   content     text not null,
-  -- Dimension must match EMBEDDING_DIMENSIONS in contracts/ai.ts.
+  -- Dimension must match EMBEDDING_DIMENSIONS in web/src/contracts/ai.ts.
   embedding   vector(1536) not null,
   unique (book_id, chunk_index)
 );
@@ -65,7 +65,7 @@ create table lesson (
   retry_of_lesson_id uuid references lesson(id) on delete set null,
   content_status     text not null default 'pending'
                      check (content_status in ('pending', 'generating', 'ready', 'failed')),
-  -- LessonContent from contracts/domain.ts; null until content_status = 'ready'.
+  -- LessonContent from web/src/contracts/domain.ts; null until content_status = 'ready'.
   content            jsonb,
   completed_at       timestamptz,
   last_score         real check (last_score between 0 and 1),
@@ -78,7 +78,7 @@ create table attempt (
   id         uuid primary key default gen_random_uuid(),
   lesson_id  uuid not null references lesson(id) on delete cascade,
   score      real not null check (score between 0 and 1),
-  -- QuestionResult[] from contracts/domain.ts.
+  -- QuestionResult[] from web/src/contracts/domain.ts.
   results    jsonb not null,
   created_at timestamptz not null default now()
 );
@@ -98,7 +98,7 @@ create table replan_event (
   id                  uuid primary key default gen_random_uuid(),
   curriculum_id       uuid not null references curriculum(id) on delete cascade,
   trigger             text not null check (trigger in ('struggling', 'excelling')),
-  -- ReplanDiagnosis from contracts/domain.ts.
+  -- ReplanDiagnosis from web/src/contracts/domain.ts.
   diagnosis           jsonb not null,
   inserted_lesson_ids uuid[] not null default '{}',
   created_at          timestamptz not null default now()
@@ -106,7 +106,7 @@ create table replan_event (
 
 create index replan_event_curriculum_idx on replan_event (curriculum_id, created_at);
 
--- One row per model call: LlmCallRecord from contracts/ai.ts, written by the
+-- One row per model call: LlmCallRecord from web/src/contracts/ai.ts, written by the
 -- backend. Lets production traffic be compared across models like an eval.
 create table llm_call (
   id            uuid primary key default gen_random_uuid(),
