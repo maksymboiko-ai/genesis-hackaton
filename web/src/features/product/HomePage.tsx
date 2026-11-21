@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { Button } from '@/components/Button'
+import { Mascot } from '@/components/Mascot'
 import { kindLabel } from '@/components/KindTag'
 import { StatusNote } from '@/components/StatusNote'
 import { SubjectIcon, SubjectTile } from '@/components/SubjectTile'
@@ -13,6 +14,8 @@ import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { SUBJECTS, SUBJECT_KEYS, subjectClass, subjectKey, subjectLabel } from '@/lib/subjects'
 import type { SubjectKey } from '@/lib/subjects'
+import { streakOf } from '@/lib/streak'
+import type { MascotPose } from '@/components/Mascot'
 import { useResource } from '@/lib/useResource'
 import {
   averageScore,
@@ -30,6 +33,8 @@ import type { PlanChange } from './data'
 import { FirstPlan } from './FirstPlan'
 import { EMPTY_DRAFT, NewPlanDialog } from './NewPlanDialog'
 import type { PlanDraft } from './NewPlanDialog'
+import { StreakCard } from '@/features/streak/StreakCard'
+import { StreakNotice } from '@/features/streak/StreakNotice'
 import './product.css'
 
 type Tab = 'lessons' | 'parents'
@@ -204,6 +209,7 @@ function LessonsTab({
           ))}
         </div>
         <div className="stagger flex flex-col gap-[22px] lg:order-1">
+          <Mascot pose="peek" size={124} />
           <div className="flex flex-col gap-2">
             <h1 className="q" style={{ fontSize: 'clamp(26px, 3.4vw, 38px)' }}>
               No lessons yet
@@ -221,6 +227,7 @@ function LessonsTab({
 
   return (
     <div className="flex flex-col gap-[18px] md:gap-[26px]">
+      <StreakCard plans={plans} />
       <h1 className="q a-rise" style={{ fontSize: 'clamp(24px, 3.2vw, 34px)' }}>
         {upNext ? 'Ready for 10 minutes?' : building ? 'A new plan is on its way' : 'All caught up'}
       </h1>
@@ -254,10 +261,13 @@ function LessonsTab({
   )
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
+function Stat({ value, label, pose }: { value: string; label: string; pose?: MascotPose }) {
   return (
     <div className="cardx p-3.5 md:p-[18px]">
-      <p className="stat-n">{value}</p>
+      <p className="stat-n flex items-center gap-1.5 md:gap-2.5">
+        {pose && <Mascot pose={pose} size={36} className="md:h-12 md:w-12" />}
+        {value}
+      </p>
       <p className="sm" style={{ marginTop: 6 }}>
         {label}
       </p>
@@ -351,6 +361,7 @@ function ParentsTab({
 }) {
   const changes = planChanges(plans)
   const average = averageScore(plans)
+  const streak = streakOf(plans)
 
   if (plans.length === 0 && !building) {
     return <FirstPlan name={child.name} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
@@ -359,9 +370,10 @@ function ParentsTab({
   return (
     <div className="stagger flex flex-col gap-[18px] md:gap-6">
       <div className="grid grid-cols-3 gap-2 md:gap-4">
+        <Stat value={String(streak.count)} label="day streak" pose={streak.pose} />
         <Stat value={String(lessonsThisWeek(plans))} label="lessons this week" />
         <Stat value={average === null ? '–' : `${Math.round(average * 100)}%`} label="average quiz score" />
-        <Stat value={String(changes.length)} label={changes.length === 1 ? 'plan change' : 'plan changes'} />
+
       </div>
 
       {building && <Building subject={building} />}
@@ -499,6 +511,7 @@ export function HomePage() {
           <Skeleton tab={tab} />
         ) : (
           <div key={tab} className={tab === 'parents' ? 'a-step' : 'a-step-back'}>
+            <StreakNotice plans={plans.data!} childId={child.id} />
             {tab === 'lessons' ? (
               <LessonsTab child={child} plans={plans.data!} building={building} freshId={freshId} onNewPlan={openDialog} />
             ) : (

@@ -2,7 +2,7 @@
 
 import { Check } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { SubjectTile } from '@/components/SubjectTile'
+import { Mascot } from '@/components/Mascot'
 import { SUBJECTS } from '@/lib/subjects'
 import type { SubjectKey } from '@/lib/subjects'
 
@@ -52,7 +52,7 @@ export function BuildingPlan({
 
   return (
     <div className={`${SUBJECTS[subject].className} a-fade mx-auto flex min-h-0 w-full max-w-[624px] flex-1 flex-col gap-5 overflow-y-auto px-6 pt-12 md:px-8 md:pt-14`}>
-      <SubjectTile subject={subject} size={72} className={titles ? '' : 'a-pulse'} />
+      <Mascot key={titles ? 'ready' : 'working'} pose={titles ? 'cheer' : 'laptop'} size={136} className={titles ? 'a-pop' : 'a-pulse'} />
       <div className="flex flex-col gap-2">
         <h1 className="q" aria-live="polite">
           {titles ? `${name}’s plan is ready` : `Building ${name}’s ${SUBJECTS[subject].short.toLowerCase()} plan…`}

@@ -1,5 +1,7 @@
 'use client'
 
+import { Mascot } from '@/components/Mascot'
+import { StreakMoment } from '@/features/streak/StreakMoment'
 import { Check, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
@@ -106,6 +108,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
 
   return (
     <div className="mx-auto w-full max-w-[1044px]">
+      <StreakMoment />
       <Link href={planHref} className="barbtn -ml-2">
         <ChevronLeft size={20} strokeWidth={2.2} aria-hidden="true" />
         Plan
@@ -113,11 +116,18 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
 
       <div className="mt-3 grid gap-6 pb-10 lg:mt-8 lg:grid-cols-[340px_minmax(0,640px)] lg:justify-center lg:gap-16">
         <aside className="a-rise flex flex-col gap-[18px] lg:sticky lg:top-24 lg:self-start">
+          <div className="flex items-end justify-between gap-4">
           <h1 ref={headingRef} tabIndex={-1} className="flex items-baseline gap-2.5 outline-none">
             <span className="text-[80px] leading-none font-extrabold tracking-[-0.05em] lg:text-[96px]">{right}</span>
             <span className="text-[26px] font-extrabold text-muted lg:text-[28px]">of {total}</span>
             {lessonNumber && <span className="sr-only">, lesson {lessonNumber} done</span>}
           </h1>
+            <Mascot
+              pose={right / total >= 0.8 ? 'thumbs-up' : 'curious'}
+              size={116}
+              className="a-pop"
+            />
+          </div>
           <div className="scorebar flex gap-1.5" aria-hidden="true">
             {result.results.map((item, index) => (
               <i

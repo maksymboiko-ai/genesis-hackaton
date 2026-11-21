@@ -1,5 +1,6 @@
 'use client'
 
+import { Mascot } from '@/components/Mascot'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
@@ -264,6 +265,7 @@ function AdjustingCard() {
       <div className="flex items-center gap-2.5 text-sun-ink">
         <span className="spin" style={{ width: 22, height: 22, borderWidth: 3 }} aria-hidden="true" />
         <span className="cap">Adjusting the plan</span>
+        <Mascot pose="keep-going" size={68} className="-my-4 ml-auto" />
       </div>
       <p className="m-0 text-[19px] leading-[1.35] font-bold">Looking at the last {REPLAN_WINDOW} quizzes…</p>
       <div className="flex flex-col gap-2">
@@ -337,6 +339,7 @@ function DoneCard({ lessons }: { lessons: LessonSummary[] }) {
 
   return (
     <div className="flex flex-col gap-3 rounded-[22px] bg-s-tint p-[18px]">
+      <Mascot pose="graduate" size={108} className="a-pop" />
       <span className="cap text-s-ink">Plan complete</span>
       <div>
         <h2 className="lt next" style={{ fontSize: 19 }}>

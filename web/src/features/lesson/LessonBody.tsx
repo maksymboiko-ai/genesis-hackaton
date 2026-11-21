@@ -25,6 +25,11 @@ function components(subject: SubjectKey): Components {
       return code ? <p className="eq solo">{code}</p> : <p>{children}</p>
     },
     ol: ({ children }) => <ol className="steps">{children}</ol>,
+    li: ({ children }) => (
+      <li>
+        <div className="li-body">{children}</div>
+      </li>
+    ),
     pre: ({ node }) => <p className="eq solo">{textOf(node as HastNode).trim()}</p>,
     a: ({ children }) => <span>{children}</span>,
     img: () => null,
@@ -62,17 +67,15 @@ function PassageLine({ number, children }: { number: number; children: ReactNode
 export function LessonBody({
   sections,
   subject,
-  fontStep,
 }: {
   sections: Section[]
   subject: SubjectKey
-  fontStep: number
 }) {
   const map = components(subject)
   const md = (body: string) => <Markdown components={map}>{body}</Markdown>
 
   return (
-    <div className={`ld fs-${fontStep}`}>
+    <div className="ld">
       {sections.map((section) => {
         const { title, label } = splitLabel(section.heading ?? '')
 

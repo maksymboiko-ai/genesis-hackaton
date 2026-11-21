@@ -1,5 +1,6 @@
 import { Plus, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/Button'
+import { Mascot } from '@/components/Mascot'
 import { SubjectIcon } from '@/components/SubjectTile'
 import { SUBJECTS, SUBJECT_KEYS } from '@/lib/subjects'
 import type { SubjectKey } from '@/lib/subjects'
@@ -22,12 +23,15 @@ export function FirstPlan({
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-10 lg:pt-4">
       <div className="stagger flex flex-col gap-5 lg:justify-between">
-        <div className="flex flex-col gap-2">
+        <div className="flex items-end justify-between gap-4">
+          <div className="flex flex-col gap-2">
           <p className="cap text-math-ink">Start here</p>
           <h1 className="q" style={{ fontSize: 'clamp(26px, 3.4vw, 38px)' }}>
             Build {name}’s first plan
           </h1>
           <p className="sub">Pick a subject, say what’s hard, and the first plan is ready in about 10 seconds.</p>
+          </div>
+          <Mascot pose="idea" size={112} className="hidden sm:block" />
         </div>
 
         <div className="grid grid-cols-3 gap-2.5 md:gap-4">

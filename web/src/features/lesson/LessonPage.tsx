@@ -1,6 +1,7 @@
 'use client'
 
-import { Check, ChevronLeft, CircleAlert } from 'lucide-react'
+import { Mascot } from '@/components/Mascot'
+import { Check, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -18,7 +19,6 @@ import { Results } from './Results'
 import { extractPassage, splitLabel, splitSections, wordCount } from './text'
 import './lesson.css'
 
-const FONT_KEY = 'lesson-font-step'
 const STAGES = ['Matching your level', 'Building a worked example', 'Writing the questions']
 const STAGE_MS = 1300
 
@@ -46,23 +46,6 @@ function Lesson({ lessonId }: { lessonId: string }) {
   const [result, setResult] = useState<SubmitAttemptResponse | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [fontStep, setFontStep] = useState(() => {
-    try {
-      const stored = typeof window === 'undefined' ? null : localStorage.getItem(FONT_KEY)
-      return stored === '0' ? 0 : stored === '2' ? 2 : 1
-    } catch {
-      return 1
-    }
-  })
-
-  const cycleFont = () => {
-    const next = (fontStep + 1) % 3
-    setFontStep(next)
-    try {
-      localStorage.setItem(FONT_KEY, String(next))
-    } catch {}
-  }
-
   const subject = subjectKey(curriculum?.subject ?? (lesson ? `${lesson.title} ${lesson.skills.join(' ')}` : ''))
   const position = curriculum && lesson ? curriculum.lessons.findIndex((item) => item.id === lesson.id) : -1
   const lessonNumber = position >= 0 ? position + 1 : null
@@ -116,7 +99,7 @@ function Lesson({ lessonId }: { lessonId: string }) {
   if (!lesson || (!curriculum && !curriculumResource.error)) return <LoadingShell />
 
   return (
-    <div className={SUBJECTS[subject].className}>
+    <div className={`${SUBJECTS[subject].className}`}>
       {mode === 'quiz' && (
         <Quiz
           questions={questions}
@@ -150,8 +133,6 @@ function Lesson({ lessonId }: { lessonId: string }) {
           subject={subject}
           sections={sections}
           wordTotal={wordCount(markdown)}
-          fontStep={fontStep}
-          onFont={cycleFont}
           onStart={startQuiz}
           onRetry={lessonResource.reload}
         />
@@ -175,8 +156,8 @@ function LoadingShell() {
 function FailNote() {
   return (
     <div role="alert" className="a-rise flex gap-3 rounded-[18px] bg-danger-soft p-4">
-      <CircleAlert size={22} strokeWidth={2} className="mt-0.5 flex-none text-danger" aria-hidden="true" />
-      <p className="m-0 text-base leading-normal font-medium">
+      <Mascot pose="sad" size={72} />
+      <p className="m-0 self-center text-base leading-normal font-medium">
         <b>This lesson didn’t finish loading.</b> That’s on us, not you. Nothing you did is lost.
       </p>
     </div>
@@ -193,6 +174,7 @@ function Preparing() {
 
   return (
     <div className="a-fade flex flex-col gap-6">
+      <Mascot pose="reading" size={112} className="a-pulse" />
       <div className="flex flex-col gap-2.5 rounded-[22px] bg-s-tint p-[18px]" role="status" aria-live="polite">
         <p className="lt next">Writing your lesson…</p>
         {STAGES.map((text, index) =>
@@ -226,8 +208,6 @@ type ReadingProps = {
   subject: ReturnType<typeof subjectKey>
   sections: ReturnType<typeof splitSections>
   wordTotal: number
-  fontStep: number
-  onFont: () => void
   onStart: () => void
   onRetry: () => void
 }
@@ -240,8 +220,6 @@ function Reading({
   subject,
   sections,
   wordTotal,
-  fontStep,
-  onFont,
   onStart,
   onRetry,
 }: ReadingProps) {
@@ -269,7 +247,7 @@ function Reading({
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onScroll)
     }
-  }, [ready, fontStep])
+  }, [ready])
 
   useEffect(() => {
     if (!ready || outline.length === 0) return
@@ -299,10 +277,7 @@ function Reading({
           <span className="sm whitespace-nowrap">
             {lessonNumber && curriculum ? `Lesson ${lessonNumber} of ${curriculum.lessons.length}` : ''}
           </span>
-          <button type="button" className="barbtn -mr-2 justify-self-end" onClick={onFont} aria-label="Change text size">
-            <span className="text-[17px] font-extrabold">Aa</span>
-            <span className="hidden md:inline">Text size</span>
-          </button>
+          <span />
         </div>
         <div className="track" aria-hidden="true">
           <i ref={trackRef} style={{ transform: 'scaleX(0)' }} />
@@ -369,7 +344,7 @@ function Reading({
           {ready && (
             <>
               <div className="a-fade pt-4">
-                <LessonBody sections={sections} subject={subject} fontStep={fontStep} />
+                <LessonBody sections={sections} subject={subject} />
               </div>
               <div id="lesson-quiz" className="lesson-foot md:mt-10 md:scroll-mt-40">
                 <Button block onClick={onStart}>
