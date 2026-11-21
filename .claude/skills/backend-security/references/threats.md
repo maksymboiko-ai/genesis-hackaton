@@ -72,19 +72,15 @@ return ok(GetLessonResponse, toLessonResponse(lesson));
 ## 6. Malicious upload
 
 ```ts
+// The browser PUT the file to storage through a signed URL; check what is stored.
 const MAX_PDF = 20 * 1024 * 1024;
-if (Number(req.headers.get("content-length") ?? 0) > MAX_PDF + 64 * 1024) throw tooLarge();
-const form = await req.formData();
-const file = form.get("file");
-const { title } = parseWith(z.object({ title: z.string().trim().min(1).max(200) }), {
-  title: form.get("title"),
-});
-if (!(file instanceof File)) throw badRequest("file is required");
-if (file.size === 0 || file.size > MAX_PDF) throw tooLarge("PDF must be ≤ 20 MB");
-const bytes = new Uint8Array(await file.arrayBuffer());
+const storagePath = `books/${user.id}/${uploadId}.pdf`; // server ids, never file.name
+const size = await store.fileSize(storagePath);
+if (size === null) throw badRequest("Upload the file first.");
+if (size === 0 || size > MAX_PDF) throw tooLarge("PDF must be ≤ 20 MB"); // and remove the file
+const bytes = await store.downloadFile(storagePath);
 const isPdf = new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-";
-if (file.type !== "application/pdf" || !isPdf) throw unsupported("Only PDF files");
-const storagePath = `books/${crypto.randomUUID()}.pdf`; // never file.name
+if (!isPdf) throw unsupported("Only PDF files"); // and remove the file
 ```
 
 Ingestion limits: ≤ 300 pages, ≤ 1.5M extracted chars, ≤ 1000 chunks; else `failed`.
