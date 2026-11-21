@@ -489,7 +489,7 @@ function Shell({ embedded, top, children }: { embedded: boolean; top?: ReactNode
       }`}
     >
       <header className="grid items-center px-2 pt-3 md:grid-cols-[200px_1fr_200px] md:px-8 md:pt-5">
-        {embedded ? <span className="hidden md:block" /> : <Wordmark className="hidden md:block" />}
+        {embedded ? <span className="hidden md:block" /> : <Wordmark className="hidden md:inline-flex" />}
         <div className="w-full max-w-[520px] justify-self-center pr-2 md:pr-0">{top}</div>
         <span className="hidden md:block" />
       </header>

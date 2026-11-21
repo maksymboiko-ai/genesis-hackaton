@@ -1,4 +1,4 @@
-export const APP_NAME = 'margin'
+export const APP_NAME = 'Mendly'
 
 export const PRICING = {
   yearly: '$99.99 / year',

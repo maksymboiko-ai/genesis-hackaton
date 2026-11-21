@@ -182,6 +182,9 @@ body {
 }
 
 .wm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: 800 22px/1 var(--font);
   letter-spacing: -0.03em;
   color: var(--text);

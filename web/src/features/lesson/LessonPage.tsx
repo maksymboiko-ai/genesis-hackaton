@@ -293,8 +293,8 @@ function Reading({
         </div>
       </div>
 
-      <div className="pt-6 lg:grid lg:grid-cols-[200px_minmax(0,680px)] lg:justify-center lg:gap-12 lg:pt-10">
-        <nav aria-label="In this lesson" className="toc hidden pt-40 lg:block">
+      <div className="pt-6 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-14 lg:pt-10">
+        <nav aria-label="In this lesson" className="toc hidden pt-0.5 lg:block">
           {ready && outline.length > 0 && (
             <div className="sticky top-40 flex flex-col gap-0.5">
               <p className="sm mb-2 font-bold!">In this lesson</p>
