@@ -52,7 +52,8 @@ type Db = {
   mastery: (SkillMastery & { childId: string })[]
 }
 
-const STORAGE_KEY = 'mock-api'
+// Bump the suffix when a stored shape changes, so old data is not parsed.
+const STORAGE_KEY = 'mock-api-v2'
 const NETWORK_MS = 250
 const OUTLINE_MS = 1500
 const LESSON_MS = 2000
@@ -123,6 +124,7 @@ function newLesson(
   kind: LessonKind,
   outline: { title: string; objective: string; skills: string[] },
   retryOfLessonId: string | null = null,
+  reason: string | null = null,
 ): StoredLesson {
   return {
     id: id(),
@@ -133,6 +135,7 @@ function newLesson(
     objective: outline.objective,
     skills: outline.skills,
     retryOfLessonId,
+    reason,
     contentStatus: 'pending',
     completedAt: null,
     lastScore: null,
@@ -141,33 +144,87 @@ function newLesson(
   }
 }
 
+// A sample quiz with real numbers, so the mock shows what generated feedback
+// looks like. Every mock lesson uses it; choice 0 is the correct one here and
+// buildContent rotates the choices.
+const SAMPLE_QUESTIONS = [
+  {
+    prompt: 'Solve for x.\n\n`x + 5 = -2`',
+    choices: ['x = -7', 'x = 3', 'x = 7', 'x = -3'],
+    feedback: [
+      '5 was added, so you subtracted 5: -2 - 5 = -7.',
+      'You added 5 to both sides instead of subtracting it. 5 was added to x, so subtract 5: -2 - 5 = -7.',
+      'The steps were right, but the sign got lost on the way: -2 - 5 is -7, not 7.',
+      'You subtracted 5 from 2, not from -2. Start from -2 and go 5 further down: -7.',
+    ],
+  },
+  {
+    prompt: 'Solve for x.\n\n`x - 6 = -10`',
+    choices: ['x = -4', 'x = -16', 'x = 4', 'x = 16'],
+    feedback: [
+      '6 was subtracted, so you added 6: -10 + 6 = -4.',
+      'You subtracted 6 again instead of undoing it. 6 was subtracted from x, so add 6: -10 + 6 = -4.',
+      'Adding 6 was the right move, but -10 + 6 stays below zero: it is -4.',
+      'You added 6 to 10, not to -10. Start from -10 and come 6 back up: -4.',
+    ],
+  },
+  {
+    prompt: 'Solve for x.\n\n`2x + 3 = -7`',
+    choices: ['x = -5', 'x = -2', 'x = 5', 'x = -10'],
+    feedback: [
+      'You subtracted 3 first, then divided by 2: -10 / 2 = -5.',
+      'You added 3 instead of subtracting it: -7 + 3 = -4, then -4 / 2 = -2. Subtract first: -7 - 3 = -10, and -10 / 2 = -5.',
+      'The steps were right, but the minus sign was dropped at the end: -10 / 2 = -5.',
+      'You stopped one step early. -10 is what 2x equals, so divide by 2: x = -5.',
+    ],
+  },
+  {
+    prompt: 'Solve for x.\n\n`-x + 4 = 9`',
+    choices: ['x = -5', 'x = 5', 'x = 13', 'x = -13'],
+    feedback: [
+      'Subtract 4 to get -x = 5, then flip both signs: x = -5.',
+      'You found -x = 5 and stopped. If the opposite of x is 5, then x is -5.',
+      'You added 4 instead of subtracting it. 4 was added, so subtract: 9 - 4 = 5, which gives -x = 5 and x = -5.',
+      'You added 4 instead of subtracting it. Subtract 4 to get -x = 5, so x = -5.',
+    ],
+  },
+]
+
 function buildContent(lesson: StoredLesson): LessonContent {
   const skills = lesson.skills.length ? lesson.skills : ['general']
-  const questions = [0, 1, 2].map((index) => {
-    const skill = skills[index % skills.length]
+  const questions = SAMPLE_QUESTIONS.map((sample, index) => {
+    // Rotate the choices so the correct one is not always first.
     const correctIndex = (index + lesson.position) % CHOICES_PER_QUESTION
-    const wrong = ['A common mistake', 'A partly right answer', 'An unrelated answer']
-    const choices = Array.from({ length: CHOICES_PER_QUESTION }, (_, choice) =>
-      choice === correctIndex ? 'The correct answer' : wrong.pop()!,
+    const order = Array.from(
+      { length: CHOICES_PER_QUESTION },
+      (_, choice) => (choice - correctIndex + CHOICES_PER_QUESTION) % CHOICES_PER_QUESTION,
     )
+    const choiceFeedback = order.map((from) => sample.feedback[from])
     return {
       id: id(),
-      prompt: `Question ${index + 1}: which answer shows ${label(skill)}?`,
-      choices,
+      prompt: sample.prompt,
+      choices: order.map((from) => sample.choices[from]),
       correctIndex,
-      explanation: `This one is correct because it applies ${label(skill)} the way the lesson explains.`,
-      skill,
+      explanation: choiceFeedback[correctIndex],
+      choiceFeedback,
+      skill: skills[index % skills.length],
     }
   })
 
   return {
     bodyMarkdown: [
-      `## ${lesson.title}`,
-      lesson.objective,
-      '### Key idea',
-      `This is sample lesson text from the mock API. The real lesson explains **${label(skills[0])}** with examples at the learner's level.`,
-      '### Example',
-      '1. Read the problem carefully.\n2. Pick the rule that fits.\n3. Check the answer.',
+      'When you solve an equation, you undo whatever was done to `x`. The tool for undoing is the **opposite operation**: adding undoes subtracting, and subtracting undoes adding.',
+      'The tricky part is negative numbers. They can hide which operation is really happening.',
+      '## Read the sign first',
+      'Look at `x + 5 = -2`. The number next to `x` is `+5`, so 5 was added. To undo it, subtract 5 from both sides.',
+      '- `x + 5` means 5 was added, so **subtract 5**.\n- `x - 5` means 5 was subtracted, so **add 5**.\n- `x + (-5)` is the same as `x - 5`, so **add 5**.',
+      '## Worked example',
+      'Solve `3x + 4 = -11`',
+      '1. Find what happened to `x` last: **4 was added**.\n2. Subtract 4 from both sides. `3x = -11 - 4 = -15`\n3. Undo the multiplying: divide both sides by 3. `x = -5`\n4. Check by putting it back in. `3(-5) + 4 = -11`',
+      '## The two-second check',
+      '1. Point at the number you want to move.\n2. Say its sign out loud: "plus four".\n3. Do the opposite: "so I subtract four".',
+      'It feels slow. It catches the most common mistake in this whole plan.',
+      '**Remember:** the sign belongs to the number. When the number moves, its sign decides what you do.',
     ].join('\n\n'),
     questions,
   }
@@ -194,15 +251,31 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
 
     missingSkills.forEach((skill) =>
       inserted.push(
-        newLesson(curriculum.id, start + inserted.length, 'remedial', {
-          title: `Review: ${label(skill)}`,
-          objective: `Rebuild ${label(skill)} from the ground up.`,
-          skills: [skill],
-        }),
+        newLesson(
+          curriculum.id,
+          start + inserted.length,
+          'remedial',
+          {
+            title: `Review: ${label(skill)}`,
+            objective: `Rebuild ${label(skill)} from the ground up.`,
+            skills: [skill],
+          },
+          null,
+          `Your answers on ${label(skill)} went different ways, so we start from the idea underneath it.`,
+        ),
       ),
     )
     failed.forEach((lesson) =>
-      inserted.push(newLesson(curriculum.id, start + inserted.length, 'retry', lesson, lesson.id)),
+      inserted.push(
+        newLesson(
+          curriculum.id,
+          start + inserted.length,
+          'retry',
+          lesson,
+          lesson.id,
+          'A second try at this lesson, now that the review lessons are behind you.',
+        ),
+      ),
     )
     lessons
       .filter((lesson) => lesson.position >= start)
@@ -210,19 +283,29 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
 
     diagnosis = {
       summary: 'The last lessons were too hard, so review lessons come first.',
+      childMessage:
+        'Your answers showed us exactly where things slip. A couple of short lessons come first, so the next part feels easier.',
       mistakes: missingSkills.map((skill) => `Several wrong answers on ${label(skill)}.`),
       missingSkills,
     }
   } else {
     inserted.push(
-      newLesson(curriculum.id, lessons.length, 'extension', {
-        title: 'Challenge: going further',
-        objective: 'Harder problems for a learner who is ahead of the plan.',
-        skills: ['advanced-problems'],
-      }),
+      newLesson(
+        curriculum.id,
+        lessons.length,
+        'extension',
+        {
+          title: 'Challenge: going further',
+          objective: 'Harder problems for a learner who is ahead of the plan.',
+          skills: ['advanced-problems'],
+        },
+        null,
+        'You got nearly everything right three lessons in a row, so here is something harder.',
+      ),
     )
     diagnosis = {
       summary: 'The last lessons went very well, so a harder lesson was added.',
+      childMessage: 'You are ahead of the plan, so we added a challenge lesson at the end.',
       mistakes: [],
       missingSkills: [],
     }
@@ -356,7 +439,7 @@ function submitAttempt(db: Db, lessonId: string, raw: unknown) {
       chosenIndex: answer.chosenIndex,
       correctIndex: question.correctIndex,
       correct: answer.chosenIndex === question.correctIndex,
-      explanation: question.explanation,
+      explanation: question.choiceFeedback[answer.chosenIndex] ?? question.explanation,
     }
   })
   const score = results.filter((result) => result.correct).length / results.length

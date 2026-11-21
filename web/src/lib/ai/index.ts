@@ -134,6 +134,15 @@ export const aiService: AiService = {
               `${label} correctIndex must be an integer from 0 to ${CHOICES_PER_QUESTION - 1}`,
             );
           }
+          const choiceFeedback = question.choiceFeedback.map((text) => text.trim());
+          if (
+            choiceFeedback.length !== CHOICES_PER_QUESTION ||
+            choiceFeedback.some((text) => !text)
+          ) {
+            throw new InvalidOutputError(
+              `${label} must have feedback for each of its ${CHOICES_PER_QUESTION} choices`,
+            );
+          }
           const skill = toSlug(question.skill);
           if (!input.lesson.skills.includes(skill)) {
             throw new InvalidOutputError(
@@ -145,7 +154,8 @@ export const aiService: AiService = {
             prompt: nonEmpty(question.prompt, `${label} prompt`),
             choices: question.choices,
             correctIndex: question.correctIndex,
-            explanation: question.explanation.trim(),
+            explanation: choiceFeedback[question.correctIndex],
+            choiceFeedback,
             skill,
           };
         });
@@ -173,6 +183,10 @@ export const aiService: AiService = {
       check: (output) => ({
         diagnosis: {
           summary: nonEmpty(output.diagnosis.summary, "diagnosis summary"),
+          childMessage: nonEmpty(
+            output.diagnosis.childMessage,
+            "diagnosis childMessage",
+          ),
           mistakes: output.diagnosis.mistakes
             .map((mistake) => mistake.trim())
             .filter(Boolean),
@@ -182,7 +196,12 @@ export const aiService: AiService = {
             ),
           ],
         },
-        newLessons: checkLessonOutlines(output.newLessons),
+        newLessons: checkLessonOutlines(output.newLessons).map(
+          (lesson, index) => ({
+            ...lesson,
+            reason: nonEmpty(lesson.reason, `lesson ${index + 1} reason`),
+          }),
+        ),
       }),
     });
   },

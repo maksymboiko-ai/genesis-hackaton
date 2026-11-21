@@ -154,7 +154,8 @@ export function lessonPrompt(input: GenerateLessonInput): Prompt {
     system: join([
       "You write one lesson for a school child, followed by a multiple-choice quiz.",
       "The lesson body is Markdown, 250 to 450 words, written to the child at their grade level: a short hook, the idea explained step by step, at least one fully worked example, and a one-line recap. Use headings and lists. No tables, images or links.",
-      `Then write 4 or 5 quiz questions. Each has exactly ${CHOICES_PER_QUESTION} choices with exactly one correct, a zero-based correctIndex, a one or two sentence explanation of why the correct choice is right, and the one skill it tests, copied exactly from the lesson's skills. Cover every skill of the lesson at least once. Wrong choices should be the results of typical mistakes, not obviously silly. Vary the position of the correct choice. Every question must be answerable from the lesson body alone.`,
+      "Put every number sentence, equation and expression in backticks, e.g. `3x + 4 = -11`, and bold each key term once where it is introduced. End the body with one line that starts with **Remember:**.",
+      `Then write the quiz: 4 questions for grades 1 to 4, otherwise 5. Each has exactly ${CHOICES_PER_QUESTION} choices with exactly one correct, a zero-based correctIndex, choiceFeedback, and the one skill it tests, copied exactly from the lesson's skills. choiceFeedback has one entry per choice, in the same order, written to a child who picked that choice, in one or two sentences. For the correct choice, say what they did right ("5 was added, so you subtracted 5"). For a wrong choice, name the slip that leads to it and then show the right way ("You added 3 instead of subtracting it. Subtract first: ..."). Never call the child or the answer wrong, bad or silly. Cover every skill of the lesson at least once. Wrong choices should be the results of typical mistakes, not obviously silly. Vary the position of the correct choice. Every question must be answerable from the lesson body alone.`,
       "Work each question out before writing it and make sure the choice at correctIndex really is correct.",
       "Adapt to the learner: use the notes on how this child learns, and go slower where mastery of the lesson's skills is low.",
       STYLE_RULE,
@@ -190,7 +191,8 @@ export function replanPrompt(input: ReplanInput): Prompt {
     system: join([
       "You adjust a child's curriculum after their recent quiz results.",
       task,
-      "The diagnosis summary is 1 to 2 sentences addressed to the parent, specific and kind. Each new lesson has a title, a one-sentence objective and 1 to 3 skills.",
+      "The diagnosis summary is 1 to 2 sentences addressed to the parent, specific and kind. The diagnosis childMessage is 1 to 2 sentences addressed to the child about the same change: warm, concrete, at their grade level, with no scores and no words like failed or wrong.",
+      'Each new lesson has a title, a one-sentence objective, 1 to 3 skills and a reason: one sentence to the child on why this lesson was added, naming what in their answers led to it ("You mixed up the sign when a negative number moved, so we start there").',
       SKILL_RULE,
       STYLE_RULE,
     ]),

@@ -7,9 +7,11 @@ import type {
   LessonAttemptSummary,
   LessonOutline,
   OutlineLesson,
+  PreparedBook,
 } from "@/contracts/ai";
 import type { BookSection, LearnerProfile } from "@/contracts/domain";
 import { BOOK_SECTION_TITLES, BOOK_TEXT, BOOK_TITLE } from "./fixtures/book";
+import { LONG_BOOK, PLAIN_BOOK, type MapBook } from "./fixtures/map-books";
 
 export type EvalCase = {
   name: string;
@@ -72,6 +74,43 @@ function sectionText(title: string): string {
   const next = BOOK_SECTION_TITLES[BOOK_SECTION_TITLES.indexOf(title) + 1];
   const end = next ? BOOK_TEXT.indexOf(`\n${next}\n`) : BOOK_TEXT.length;
   return BOOK_TEXT.slice(start, end).trim();
+}
+
+// Strips the numbering from a printed heading: "4.2 Undoing Operations" and
+// "Lesson 3 Rivers and Lakes" both become the topic alone, lowercased.
+function topicOf(heading: string): string {
+  return heading.replace(/^(lesson\s+)?[\d.]+\s+/i, "").toLowerCase();
+}
+
+// Compares a prepared book with the headings it was built from: which printed
+// sections the map lacks, and which have their heading chunk in another section.
+function compareMap(book: PreparedBook, expected: MapBook) {
+  const found = book.sections.map((s) => s.title.toLowerCase());
+  const missing = expected.sectionTitles.filter((title) => !found.some((f) => f.includes(topicOf(title))));
+  const misplaced = expected.sectionTitles.filter((title) => {
+    const chunk = book.chunks.find((c) => c.content.includes(`${title}\n`));
+    const section = chunk && book.sections[chunk.sectionIndex];
+    return !section || !section.title.toLowerCase().includes(topicOf(title));
+  });
+  return { missing, misplaced };
+}
+
+// What a replan tells the family about the change: short, to the right
+// reader, and without verdicts.
+function explanationChecks(result: Awaited<ReturnType<AiService["replan"]>>): Record<string, boolean> {
+  const { summary, childMessage } = result.diagnosis;
+  const toChild = [childMessage, ...result.newLessons.map((l) => l.reason)];
+  return {
+    "child message is at most 50 words": words(childMessage) <= 50,
+    "child message differs from the parent summary": childMessage !== summary,
+    "every reason is one sentence of at most 35 words": result.newLessons.every((l) => words(l.reason) <= 35),
+    "nothing said to the child mentions scores or failing": !toChild.some((text) => /\d+\s?%|bfail|bwrongb/i.test(text)),
+  };
+}
+
+function sample(items: string[]): string {
+  if (!items.length) return "none";
+  return items.length > 4 ? `${items.slice(0, 4).join(", ")}, …` : items.join(", ");
 }
 
 // What the backend passes for a lesson on section 4.3: that section's text.
@@ -210,6 +249,16 @@ async function lessonCase(
     "correct choice position varies":
       new Set(content.questions.map((q) => q.correctIndex)).size > 1,
     "every question has an explanation": content.questions.every((q) => q.explanation.length > 0),
+    // The feedback for a wrong choice must be its own text, not the
+    // explanation of the right answer repeated.
+    "wrong choices get their own feedback": content.questions.every(
+      (q) => new Set(q.choiceFeedback).size === q.choiceFeedback.length,
+    ),
+    "feedback never says wrong or incorrect": !content.questions.some((q) =>
+      q.choiceFeedback.some((text) => /b(wrong|incorrect|silly)b/i.test(text)),
+    ),
+    "math is in backticks": /`[^`]*\d[^`]*`/.test(content.bodyMarkdown),
+    "ends with a Remember line": /\*\*Remember:?\*\*/.test(content.bodyMarkdown),
     ...extra(content.bodyMarkdown),
   });
 }
@@ -401,6 +450,42 @@ export const CASES: EvalCase[] = [
     },
   },
   {
+    name: "book map: long book, 60 sections (RAG)",
+    task: "book_map",
+    run: async (ai, options) => {
+      const book = await ai.prepareBook({ title: LONG_BOOK.title, text: LONG_BOOK.text }, options);
+      const { missing, misplaced } = compareMap(book, LONG_BOOK);
+      // "7.3 Percent of a Number" belongs to the chapter printed as "Chapter 7 ...".
+      const wrongChapter = book.sections.filter((s) => {
+        const number = /^(\d+)\.\d+/.exec(s.title.trim())?.[1];
+        return number !== undefined && !new RegExp(`chapter ${number}\\b`, "i").test(s.chapter);
+      });
+      return failures({
+        [`finds all 60 sections (missing ${missing.length}: ${sample(missing)})`]: missing.length === 0,
+        [`no invented sections (returned ${book.sections.length})`]: book.sections.length <= LONG_BOOK.sectionTitles.length + 1,
+        [`chunks sit in their own section (misplaced ${misplaced.length}: ${sample(misplaced)})`]: misplaced.length === 0,
+        [`names the right chapter (wrong on ${wrongChapter.length})`]: wrongChapter.length === 0,
+      });
+    },
+  },
+  {
+    name: "book map: no chapters, glossary and answer key (RAG)",
+    task: "book_map",
+    run: async (ai, options) => {
+      const book = await ai.prepareBook({ title: PLAIN_BOOK.title, text: PLAIN_BOOK.text }, options);
+      const { missing, misplaced } = compareMap(book, PLAIN_BOOK);
+      const backMatter = book.sections.filter((s) => /glossary|answer key|in this book|contents/i.test(s.title));
+      const chapters = [...new Set(book.sections.map((s) => s.chapter).filter(Boolean))];
+      return failures({
+        [`finds all 6 lessons (missing: ${sample(missing)})`]: missing.length === 0,
+        [`front and back matter are not sections (got: ${sample(backMatter.map((s) => s.title))})`]: backMatter.length === 0,
+        [`no invented sections (returned ${book.sections.length})`]: book.sections.length <= PLAIN_BOOK.sectionTitles.length,
+        [`chunks sit in their own section (misplaced: ${sample(misplaced)})`]: misplaced.length === 0,
+        [`chapter is "" when the book has none (got: ${sample(chapters)})`]: chapters.length === 0,
+      });
+    },
+  },
+  {
     name: "lesson: core",
     task: "lesson",
     run: (ai, options) =>
@@ -510,6 +595,7 @@ export const CASES: EvalCase[] = [
       const text = JSON.stringify(result).toLowerCase();
       const missing = result.diagnosis.missingSkills;
       return failures({
+        ...explanationChecks(result),
         "1 to 3 remedial lessons": result.newLessons.length >= 1 && result.newLessons.length <= 3,
         "lists mistakes": result.diagnosis.mistakes.length > 0,
         "lists missing skills": missing.length > 0,
@@ -540,6 +626,7 @@ export const CASES: EvalCase[] = [
       );
       const remainingTitles = remainingLessons.map((l) => l.title.toLowerCase());
       return failures({
+        ...explanationChecks(result),
         "1 to 3 extension lessons": result.newLessons.length >= 1 && result.newLessons.length <= 3,
         "does not duplicate a remaining lesson": !result.newLessons.some((l) =>
           remainingTitles.includes(l.title.toLowerCase()),
