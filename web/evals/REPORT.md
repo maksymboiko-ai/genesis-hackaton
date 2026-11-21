@@ -12,7 +12,7 @@ These are the defaults in `src/lib/ai/models.ts`.
 | `lesson` | `google/gemini-3.8-flash` | `google/gemini-3.5-flash-lite` | 12/12 for both, 3.8 s against 13.9 s, 3.6× cheaper |
 | `replan` | `google/gemini-3.8-flash` | unchanged | The only model that passed 9/9; runs in the background, twice per course |
 | `learner_notes` | `openai/gpt-6-luna` | unchanged | 6/6, cheapest of the reliable models |
-| `book_map` | `google/gemini-3.8-flash` | unchanged | Not part of this run |
+| `book_map` | `google/gemini-3.8-flash` | `openai/gpt-6-luna` | 9/9 for both, 18 s against 33 s on a 60-section book, 13× cheaper. A separate run: see [Book map](#book-map) |
 
 Model cost of one course (1 outline, 8 lessons, 8 notes updates, 2 replans):
 
@@ -75,5 +75,46 @@ Passed, average seconds per call, and cost per call.
 - 3 repeats per case: a one-run difference between models is noise. Replan (9 runs) and notes (6 runs) are the thinnest.
 - The checks are rule-based. Nothing here scores teaching quality or factual correctness of a lesson.
 - Costs are list-price estimates from token counts, not billed amounts.
-- `book_map` and the retrieval evals were added after this run and are not covered.
+- `book_map` was evaluated in a separate run, reported under [Book map](#book-map). The retrieval eval (`npm run evals:rag`) is not covered.
 - `qwen/qwen3.8-flash` was dropped: it timed out repeatedly and did not complete its 54 runs.
+
+## Book map
+
+Run on 21.11.2026 (`npm run evals -- --only="book map" --repeat=3 <models>`). The task: given the opening 500 characters of every chunk of a book, return its sections with the chunk each one starts at. Splitting the text into chunks is code, not a model, and is the same for every model here.
+
+Three books, each mapped 3 times per model (9 runs):
+
+| Case | Book | Checks |
+|---|---|---|
+| Short | 3 chapters, 8 sections, 9 chunks | finds every section, invents none, heading chunks sit in their own section, names the chapter |
+| Long | 12 chapters, 60 sections, 163 chunks | the same, plus the right chapter for each section |
+| Plain | 6 lessons, no chapters, glossary and answer key, 7 chunks | the same, plus chapter is empty and the contents page and back matter are not sections |
+
+| Model | Passed | Short | Long | Plain | Long book: time | Long book: cost |
+|---|---|---|---|---|---|---|
+| `openai/gpt-6-luna` (chosen) | 9/9 | 3/3 | 3/3 | 3/3 | 17.6 s | $0.0032 |
+| `google/gemini-3.5-flash-lite` | 9/9 | 3/3 | 3/3 | 3/3 | 7.4 s | $0.0142 |
+| `meta/muse-ember` | 9/9 | 3/3 | 3/3 | 3/3 | 11.0 s | $0.0054 |
+| `deepseek/deepseek-v4.1-flash` | 9/9 | 3/3 | 3/3 | 3/3 | 34.4 s | $0.0029 |
+| `google/gemma-4-31b-it` | 9/9 | 3/3 | 3/3 | 3/3 | 32.3 s | $0.0050 |
+| `openai/gpt-6.1-terra` | 9/9 | 3/3 | 3/3 | 3/3 | 24.4 s | $0.0297 |
+| `google/gemini-3.8-flash` (before) | 9/9 | 3/3 | 3/3 | 3/3 | 33.0 s | $0.0415 |
+| `z-ai/glm-5.3-flash` | 8/9 | 3/3 | 3/3 | 2/3 | 36.2 s | $0.0014 |
+| `anthropic/claude-haiku-5.5` | 6/9 | 3/3 | 3/3 | 0/3 | 14.1 s | $0.0049 |
+| `mistralai/mistral-small-2603` | 4/9 | 1/3 | 3/3 | 0/3 | 19.5 s | $0.0049 |
+
+Time and cost are the map call alone, averaged over the 3 long-book runs (about 19k input tokens). Embedding the same book's 163 chunks is 35k tokens on `openai/text-embedding-3-small`, whatever model builds the map.
+
+### What it shows
+
+- **Every model mapped the 60-section book correctly**, all 30 runs. Length up to 163 chunks is not what separates them.
+- **The book with no chapters does.** `claude-haiku-5.5` put the lesson heading in the chapter field in 3 of 3 runs. `mistral-small-2603` made the contents page a section in 3 of 3 runs, and on the short book dropped section 3.1 in 2 of 3. `glm-5.3-flash` put the lesson headings in the wrong chunks once.
+- **No call needed a retry** and none returned invalid JSON.
+- **The previous default was the slowest and most expensive model that passed.** `gpt-6-luna` is the cheapest reliable choice. `gemini-3.5-flash-lite` is the pick if the wait matters more than the cost: 7 s, at 4× the price of `gpt-6-luna`.
+
+### Limits
+
+- **163 chunks is about 130,000 characters, a short book.** A full textbook is several times longer, and map time grows with the number of sections the model has to write. At the measured rate a 300-section book would take `gpt-6-luna` roughly 90 s, which is the request timeout in `lib/ai/client.ts`. That is an extrapolation, not a measurement: test a real upload before relying on any model for long books.
+- **The fixtures are made up and tidy.** The long book repeats the same paragraph shapes in every section. Real PDF text has running headers, page numbers and broken lines, which none of these books have.
+- **Headings the chunker does not recognize are not tested.** Chunks are cut at "Chapter 3", "4.2 Title", "Lesson 3" and Markdown headings. A book with other heading styles is cut by size alone, a heading can then fall outside the 500 characters the model sees, and no model can place that section.
+- 3 runs per case: a one-run difference is noise.
