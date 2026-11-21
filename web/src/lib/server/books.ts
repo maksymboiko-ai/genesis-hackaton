@@ -1,13 +1,13 @@
 import "server-only";
-import { z } from "zod";
 import type { PreparedBook } from "@/contracts/ai";
+import type { CreateBookRequest, CreateBookUploadResponse } from "@/contracts/api";
 import type { Book, BookSection } from "@/contracts/domain";
 import { ownedBook } from "./access";
 import { getAi } from "./ai";
 import type { AuthUser } from "./auth";
 import { runInBackground } from "./background";
-import { badRequest, tooLarge, unsupported } from "./errors";
-import { parseWith } from "./http";
+import { getEnv } from "./env";
+import { type HttpError, badRequest, conflict, notFound, tooLarge, unsupported } from "./errors";
 import { extractPdfText, isPdf, MAX_PDF_BYTES } from "./pdf";
 import { assertEmbedding } from "./retrieval";
 import { getStore } from "./store";
@@ -17,41 +17,57 @@ import { cleanText } from "./text";
 export const MAX_CHUNKS = 1500;
 const MAX_SECTIONS = 300;
 const MAX_CHUNK_CHARS = 4000;
-// Multipart overhead allowed on top of the file itself.
-const FORM_OVERHEAD = 64 * 1024;
 
 const toBook = (row: BookRow): Book => ({ id: row.id, title: row.title, status: row.status });
 
-const Fields = z.object({ title: z.string().trim().min(1).max(200) });
+// Server-generated path: the client file name never reaches storage, and the
+// owner's id in it means an upload id only works for the parent who got it.
+const uploadPath = (user: AuthUser, uploadId: string) => `books/${user.id}/${uploadId}.pdf`;
 
-/** POST /books: validates and stores the PDF, responds, ingests in the background. */
-export async function uploadBook(user: AuthUser, req: Request): Promise<Book> {
-  const type = req.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!type.startsWith("multipart/form-data")) throw unsupported("Expected multipart/form-data.");
+/** POST /books/uploads: picks where one PDF will be stored and says where to send it. */
+export async function createBookUpload(user: AuthUser): Promise<CreateBookUploadResponse> {
+  const uploadId = crypto.randomUUID();
+  const direct = await getStore().createUploadUrl(uploadPath(user, uploadId));
+  return { uploadId, uploadUrl: direct ?? `/api/books/uploads/${uploadId}` };
+}
+
+/**
+ * PUT /books/uploads/:uploadId: takes the file itself when the store has no
+ * direct uploads (local runs without a database, tests). Deployed, the browser
+ * sends the file straight to storage and this answers 404.
+ */
+export async function receiveBookUpload(user: AuthUser, uploadId: string, req: Request): Promise<void> {
+  if (getEnv().STORE !== "memory") throw notFound("Upload");
   const declared = Number(req.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > MAX_PDF_BYTES + FORM_OVERHEAD) throw tooLarge("The PDF must be 20 MB or less.");
-
-  let form: FormData;
-  try {
-    form = await req.formData();
-  } catch {
-    throw badRequest("Malformed form data.");
-  }
-  const { title } = parseWith(Fields, { title: form.get("title") });
-  const file = form.get("file");
-  if (!(file instanceof File)) throw badRequest("Invalid fields: file.");
-  if (file.size === 0) throw badRequest("The file is empty.");
-  if (file.size > MAX_PDF_BYTES) throw tooLarge("The PDF must be 20 MB or less.");
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  // The MIME type is chosen by the client; the magic number is not.
-  if (file.type !== "application/pdf" || !isPdf(bytes)) throw unsupported("Only PDF files are supported.");
+  if (Number.isFinite(declared) && declared > MAX_PDF_BYTES) throw tooLarge("The PDF must be 20 MB or less.");
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.byteLength > MAX_PDF_BYTES) throw tooLarge("The PDF must be 20 MB or less.");
 
   const store = getStore();
-  // Server-generated path: the client file name never reaches storage.
-  const storagePath = `books/${crypto.randomUUID()}.pdf`;
-  await store.uploadFile(storagePath, bytes, "application/pdf");
-  const book = await store.createBook({ ownerId: user.id, title: cleanText(title, 200), storagePath });
+  const path = uploadPath(user, uploadId);
+  if ((await store.fileSize(path)) !== null) throw conflict("This upload already has a file.");
+  await store.uploadFile(path, bytes, "application/pdf");
+}
+
+/** POST /books: checks the uploaded PDF, responds, ingests in the background. */
+export async function createBook(user: AuthUser, input: CreateBookRequest): Promise<Book> {
+  const store = getStore();
+  const storagePath = uploadPath(user, input.uploadId);
+  const size = await store.fileSize(storagePath);
+  if (size === null) throw badRequest("Upload the file first.");
+
+  // The browser sent the file to storage itself, so nothing about it is
+  // trusted until checked here. A rejected file does not stay in storage.
+  const reject = async (err: HttpError) => {
+    await store.removeFile(storagePath).catch((e) => console.error("[books] could not remove a rejected upload", e));
+    return err;
+  };
+  if (size === 0) throw await reject(badRequest("The file is empty."));
+  if (size > MAX_PDF_BYTES) throw await reject(tooLarge("The PDF must be 20 MB or less."));
+  // The MIME type is chosen by the client; the magic number is not.
+  if (!isPdf(await store.downloadFile(storagePath))) throw await reject(unsupported("Only PDF files are supported."));
+
+  const book = await store.createBook({ ownerId: user.id, title: cleanText(input.title, 200), storagePath });
   runInBackground(`book ${book.id}`, () => ingestBook(book.id));
   return toBook(book);
 }

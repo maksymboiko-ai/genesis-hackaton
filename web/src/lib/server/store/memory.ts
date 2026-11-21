@@ -141,10 +141,22 @@ export class MemoryStore implements Store {
     this.data.files.set(path, new Uint8Array(bytes));
   }
 
+  async createUploadUrl() {
+    return null;
+  }
+
+  async fileSize(path: string) {
+    return this.data.files.get(path)?.byteLength ?? null;
+  }
+
   async downloadFile(path: string) {
     const bytes = this.data.files.get(path);
     if (!bytes) throw new Error("file not found");
     return new Uint8Array(bytes);
+  }
+
+  async removeFile(path: string) {
+    this.data.files.delete(path);
   }
 
   async getBook(id: string) {

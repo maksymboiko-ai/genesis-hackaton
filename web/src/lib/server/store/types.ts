@@ -129,8 +129,16 @@ export interface Store {
   /** Marks the book failed and removes any chunks already stored. */
   failBook(id: string): Promise<void>;
   /** Private file storage for uploaded PDFs. */
+  /**
+   * A short-lived URL the browser can PUT one new file to, or null when the
+   * store has no direct uploads (in-memory) and the API takes the bytes.
+   */
+  createUploadUrl(path: string): Promise<string | null>;
   uploadFile(path: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  /** Size in bytes, or null when nothing is stored at the path. */
+  fileSize(path: string): Promise<number | null>;
   downloadFile(path: string): Promise<Uint8Array>;
+  removeFile(path: string): Promise<void>;
 
   // --- curriculum, lesson, replan_event ---
   /** Inserts the curriculum and its core lessons in one transaction. */

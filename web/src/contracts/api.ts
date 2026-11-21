@@ -80,10 +80,24 @@ export const GetProfileResponse = LearnerProfile;
 
 // --- Books (RAG sources) --------------------------------------------------
 
+// Uploading a book takes three requests, because the PDF (up to 20 MB) is too
+// large to pass through an API route on Vercel (4.5 MB request limit):
+//   1. POST /books/uploads        -> uploadId, uploadUrl
+//   2. PUT uploadUrl              body: the file, Content-Type: application/pdf
+//   3. POST /books                { title, uploadId }
+
+// POST /books/uploads (no body)
+// uploadUrl is short-lived, takes one file, and is not under /api: it points
+// at file storage. Use it as given.
+export const CreateBookUploadResponse = z.object({ uploadId: Id, uploadUrl: z.string().min(1) });
+export type CreateBookUploadResponse = z.infer<typeof CreateBookUploadResponse>;
+
 // POST /books
-// multipart/form-data with fields: title (string), file (PDF).
-// Responds as soon as the file is stored; ingestion continues in the
-// background and the book moves from "processing" to "ready" or "failed".
+// Checks the uploaded file (a PDF of 20 MB or less) and responds; ingestion
+// continues in the background and the book moves from "processing" to
+// "ready" or "failed".
+export const CreateBookRequest = z.object({ title: z.string().min(1).max(200), uploadId: Id });
+export type CreateBookRequest = z.infer<typeof CreateBookRequest>;
 export const CreateBookResponse = Book;
 
 // GET /books

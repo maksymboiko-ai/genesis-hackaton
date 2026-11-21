@@ -18,6 +18,7 @@ import type {
   SkillMastery,
 } from '@/contracts/domain'
 import {
+  CreateBookRequest,
   CreateChildRequest,
   CreateCurriculumRequest,
   SubmitAttemptRequest,
@@ -535,8 +536,13 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
     }
     case 'GET books':
       return { books: db.books.map((book) => omit(book, 'readyAt')) }
+    case 'POST books/:id': {
+      if (itemId !== 'uploads') throw new MockError(404, 'not_found', 'No such endpoint.')
+      // The client skips the PUT in mock mode, so the URL is never fetched.
+      return { uploadId: id(), uploadUrl: 'http://mock.local/upload' }
+    }
     case 'POST books': {
-      const title = body instanceof FormData ? String(body.get('title') ?? '').trim() : ''
+      const title = parseBody<CreateBookRequest>(CreateBookRequest, body).title.trim()
       if (!title) throw new MockError(400, 'bad_request', 'A textbook needs a title.')
       const book: StoredBook = { id: id(), title, status: 'processing', readyAt: Date.now() + BOOK_MS }
       db.books.push(book)
