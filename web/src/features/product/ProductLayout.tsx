@@ -6,11 +6,10 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/Button'
 import { Wordmark } from '@/components/Wordmark'
 import { APP_NAME } from '@/lib/config'
-import { useSession } from '@/lib/session'
+import { signOutEverywhere } from '@/lib/auth'
 import { ChildMenu } from './ChildMenu'
 
 export function ProductLayout({ children }: { children: ReactNode }) {
-  const { signOut } = useSession()
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -22,7 +21,7 @@ export function ProductLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-2 md:gap-3">
             <ChildMenu />
             <div className="hidden md:block">
-              <Button variant="ghost" size="sm" onClick={signOut}>
+              <Button variant="ghost" size="sm" onClick={() => void signOutEverywhere()}>
                 <LogOut size={18} strokeWidth={2.2} aria-hidden="true" />
                 Sign out
               </Button>

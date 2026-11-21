@@ -5,6 +5,8 @@
 // With a real database and model, point it at a dev deployment instead.
 const base = process.argv[2] ?? "http://localhost:3000";
 let failures = 0;
+// Session cookies, as a browser would keep them.
+const jar = new Map();
 
 const check = (ok, what) => {
   console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
@@ -12,12 +14,16 @@ const check = (ok, what) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function api(method, path, body) {
-  const res = await fetch(base + path, {
-    method,
-    headers: body ? { "content-type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
+async function api(method, path, body, { cookies = true } = {}) {
+  const headers = body ? { "content-type": "application/json" } : {};
+  if (cookies && jar.size) headers.cookie = [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
+  const res = await fetch(base + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  for (const c of res.headers.getSetCookie()) {
+    const [pair, ...attrs] = c.split(";");
+    const [k, v] = pair.split("=");
+    if (attrs.some((a) => a.trim() === "Max-Age=0")) jar.delete(k.trim());
+    else jar.set(k.trim(), v);
+  }
   const text = await res.text();
   return { status: res.status, body: text ? JSON.parse(text) : null };
 }
@@ -30,6 +36,12 @@ async function poll(fn, done, tries = 60) {
   }
   return fn();
 }
+
+const email = `smoke-${Date.now()}@example.com`;
+check((await api("GET", "/api/children")).status === 401, "data routes need a session");
+const signed = await api("POST", "/api/auth/signup", { name: "Smoke Parent", email, password: "smoke test password" });
+check(signed.status === 201 && jar.size === 2, "sign up sets the session cookies");
+check((await api("GET", "/api/auth/me")).body.user.email === email, "me returns the parent");
 
 const child = await api("POST", "/api/children", { name: "Smoke", gradeLevel: 5 });
 check(child.status === 201, "create child");
@@ -76,8 +88,24 @@ check(profile.body.mastery.length > 0 && profile.body.notes !== "", "mastery and
 const retried = await api("POST", `/api/lessons/${ids[0]}/retry`);
 check(retried.status === 200 && retried.body.contentStatus === "ready", "retry on a ready lesson returns it unchanged");
 
+// A second parent sees none of this.
+const mine = jar.size;
+const firstJar = new Map(jar);
+jar.clear();
+await api("POST", "/api/auth/signup", { name: "Other", email: `other-${email}`, password: "smoke test password" });
+check((await api("GET", `/api/curricula/${curriculum.id}`)).status === 404 && mine === 2, "another parent gets 404 for this plan");
+check((await api("GET", "/api/children")).body.children.length === 0, "another parent sees no children");
+jar.clear();
+for (const [k, v] of firstJar) jar.set(k, v);
+
+const wrong = await api("POST", "/api/auth/login", { email, password: "not the password" }, { cookies: false });
+check(wrong.status === 401, "wrong password is refused");
+
 const bad = await api("POST", "/api/children", { name: "x", gradeLevel: 99 });
 check(bad.status === 400 && bad.body.error.code === "bad_request", "validation error envelope");
+
+const out = await api("POST", "/api/auth/logout");
+check(out.status === 200 && (await api("GET", "/api/children")).status === 401, "logout ends the session");
 
 console.log(failures ? `\n${failures} check(s) failed` : "\nall checks passed");
 process.exit(failures ? 1 : 0);

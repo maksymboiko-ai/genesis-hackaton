@@ -219,7 +219,11 @@ function LessonsTab({
   return (
     <div className="flex flex-col gap-[18px] md:gap-[26px]">
       <h1 className="q a-rise" style={{ fontSize: 'clamp(24px, 3.2vw, 34px)' }}>
-        {upNext ? 'Ready for 10 minutes?' : building ? 'A new plan is on its way' : 'All caught up'}
+        {upNext
+          ? `Ready for ${nextLesson(upNext)?.estimatedMinutes ?? 10} minutes?`
+          : building
+            ? 'A new plan is on its way'
+            : 'All caught up'}
       </h1>
       {building && <Building subject={building} />}
       <div className="stagger flex flex-col gap-[18px] md:gap-[26px]">

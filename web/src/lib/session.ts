@@ -45,6 +45,9 @@ const setChildId = (childId: string | null) => write({ ...read(), childId })
 const signIn = (user: User, childId: string | null) => write({ user, childId })
 const signOut = () => write(EMPTY)
 
+/** Clears the local session outside React (the API client, on a 401). */
+export const clearSession = signOut
+
 export function useSession() {
   const session = useSyncExternalStore(subscribe, read, () => null)
 

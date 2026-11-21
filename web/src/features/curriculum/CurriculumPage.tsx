@@ -310,7 +310,7 @@ function UpNextCard({ lesson }: { lesson: LessonSummary }) {
   return (
     <div className="flex flex-col gap-3 rounded-[22px] bg-s-tint p-[18px]">
       <div className="flex items-center justify-between gap-3">
-        <span className="cap text-s-ink">Up next · ~10 min</span>
+        <span className="cap text-s-ink">Up next · ~{lesson.estimatedMinutes} min</span>
         <KindTag kind={lesson.kind} />
       </div>
       <div>

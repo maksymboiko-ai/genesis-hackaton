@@ -7,7 +7,7 @@ import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
-import { api } from '@/lib/api'
+import { api, ApiRequestError } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { AuthShell } from './AuthShell'
 
@@ -32,7 +32,7 @@ export function LoginPage() {
   const [fields, setFields] = useState<Fields>({ email: '', password: '' })
   const [errors, setErrors] = useState<Errors>({})
   const [submitting, setSubmitting] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState('')
 
   const bind = (key: keyof Fields) => ({
     name: key,
@@ -56,15 +56,20 @@ export function LoginPage() {
     }
 
     setSubmitting(true)
-    setFailed(false)
+    setFailed('')
     try {
       const email = fields.email.trim()
+      const { user } = await api.logIn({ email, password: fields.password })
       const { children } = await api.listChildren()
       const childId = children[0]?.id ?? null
-      signIn({ name: nameFromEmail(email), email }, childId)
+      signIn({ name: user.name || nameFromEmail(user.email), email: user.email }, childId)
       router.push(childId ? '/app' : '/quiz')
-    } catch {
-      setFailed(true)
+    } catch (error) {
+      setFailed(
+        error instanceof ApiRequestError && error.code === 'unauthorized'
+          ? 'That email and password do not match. Try again.'
+          : 'Could not sign you in. Try again.',
+      )
       setSubmitting(false)
     }
   }
@@ -76,7 +81,7 @@ export function LoginPage() {
         {failed && (
           <p role="alert" className="a-fade flex items-start gap-2 rounded-[14px] bg-danger-soft px-4 py-3 text-sm font-bold text-danger">
             <CircleAlert size={18} strokeWidth={2.2} aria-hidden="true" className="mt-px flex-none" />
-            Could not sign you in. Try again.
+            {failed}
           </p>
         )}
         <TextField label="Email" type="email" autoComplete="email" {...bind('email')} />

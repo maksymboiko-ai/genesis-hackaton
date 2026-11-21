@@ -15,7 +15,7 @@ import { useResource } from '@/lib/useResource'
 import { LessonBody } from './LessonBody'
 import { Quiz } from './Quiz'
 import { Results } from './Results'
-import { extractPassage, splitLabel, splitSections, wordCount } from './text'
+import { extractPassage, splitLabel, splitSections } from './text'
 import './lesson.css'
 
 const FONT_KEY = 'lesson-font-step'
@@ -35,6 +35,15 @@ function Lesson({ lessonId }: { lessonId: string }) {
   const loadLesson = useCallback(() => api.getLesson(lessonId), [lessonId])
   const lessonResource = useResource(loadLesson, isPreparing)
   const lesson = lessonResource.data
+  const reloadLesson = lessonResource.reload
+  // "Try again" on a failed lesson: the retry endpoint starts generation at
+  // once (a plain reload would wait out the server's one-minute cooldown).
+  const retryLesson = useCallback(async () => {
+    try {
+      await api.retryLesson(lessonId)
+    } catch {}
+    reloadLesson()
+  }, [lessonId, reloadLesson])
 
   const curriculumId = lesson?.curriculumId ?? null
   const loadCurriculum = useCallback(() => api.getCurriculum(curriculumId!), [curriculumId])
@@ -149,11 +158,10 @@ function Lesson({ lessonId }: { lessonId: string }) {
           planHref={planHref}
           subject={subject}
           sections={sections}
-          wordTotal={wordCount(markdown)}
           fontStep={fontStep}
           onFont={cycleFont}
           onStart={startQuiz}
-          onRetry={lessonResource.reload}
+          onRetry={retryLesson}
         />
       )}
     </div>
@@ -225,7 +233,6 @@ type ReadingProps = {
   planHref: string
   subject: ReturnType<typeof subjectKey>
   sections: ReturnType<typeof splitSections>
-  wordTotal: number
   fontStep: number
   onFont: () => void
   onStart: () => void
@@ -239,7 +246,6 @@ function Reading({
   planHref,
   subject,
   sections,
-  wordTotal,
   fontStep,
   onFont,
   onStart,
@@ -250,7 +256,8 @@ function Reading({
   const ready = lesson.content !== null
   const failed = lesson.contentStatus === 'failed'
   const questionCount = lesson.content?.questions.length ?? 0
-  const minutes = Math.max(3, Math.round(wordTotal / 110))
+  // Computed by the backend from the written lesson: reading plus the quiz.
+  const minutes = lesson.estimatedMinutes
   const done = lesson.completedAt !== null
   const score = lesson.lastScore !== null && questionCount ? Math.round(lesson.lastScore * questionCount) : null
   const outline = useMemo(() => sections.filter((section) => section.heading), [sections])
@@ -343,7 +350,7 @@ function Reading({
             <p className="sub">{lesson.objective}</p>
             {ready && (
               <p className="sm">
-                About {minutes} minutes · then {questionCount} questions
+                About {minutes} minutes, with {questionCount} questions
               </p>
             )}
           </header>

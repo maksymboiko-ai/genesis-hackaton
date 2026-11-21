@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Child } from '@/contracts/domain'
 import { api } from '@/lib/api'
+import { signOutEverywhere } from '@/lib/auth'
 import { useSession } from '@/lib/session'
 import { useResource } from '@/lib/useResource'
 import { AVATARS } from './data'
@@ -30,7 +31,7 @@ const planCount = (plans: number) => (plans === 0 ? 'no plans yet' : plans === 1
 
 export function ChildMenu() {
   const router = useRouter()
-  const { childId, setChildId, signOut } = useSession()
+  const { childId, setChildId } = useSession()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -157,7 +158,7 @@ export function ChildMenu() {
             className="menu-item"
             onClick={() => {
               close()
-              signOut()
+              void signOutEverywhere()
             }}
           >
             <LogOut size={20} strokeWidth={2.2} aria-hidden="true" />

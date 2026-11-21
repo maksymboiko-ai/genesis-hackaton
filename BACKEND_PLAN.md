@@ -238,16 +238,16 @@ Added after checking the approved screens (`Product — learning app identity & 
 | A5 | Services and routes act only on the signed-in parent's data | ✅ | |
 | A6 | Auth routes with rate limits | ✅ | login 10 burst + 5/min, signup 5 + 1/min |
 | A7 | Tests: 401s, isolation between parents, refresh; SQL test | ✅ | 98 tests; `0007` SQL test |
-| B1 | `api.ts`: auth methods; 401 → `/login` | ⏳ | |
-| B2 | Sign-up calls the API; "email already registered" | ⏳ | |
-| B3 | Sign-in checks the password on the server | ⏳ | |
-| B4 | Sign-out calls the API | ⏳ | |
-| B5 | Route guard confirms the session with `/auth/me` | ⏳ | |
-| B6 | "Try again" → `retryLesson` | ⏳ | |
-| B7 | Results show backend `feedback` | ⏳ | |
-| B8 | Minutes from `estimatedMinutes` | ⏳ | |
-| B9 | Mock mode: auth routes, retry, new fields | 🟡 | new fields done in C1; auth and retry routes to do |
-| C2 | Checks: types, lint, tests, SQL, build, HTTP smoke | ⏳ | |
+| B1 | `api.ts`: auth methods; 401 → `/login` | ✅ | `signUp`, `logIn`, `logOut`, `me`; a 401 on a data route clears the local session and reloads `/login` |
+| B2 | Sign-up calls the API; "email already registered" | ✅ | taken email → field error with "Sign in instead" |
+| B3 | Sign-in checks the password on the server | ✅ | name comes from the account |
+| B4 | Sign-out calls the API | ✅ | `lib/auth.ts` `signOutEverywhere()` (child menu, product header) |
+| B5 | Route guard confirms the session with `/auth/me` | ✅ | once per page load in `Stage` |
+| B6 | "Try again" → `retryLesson` | ✅ | |
+| B7 | Results show backend `feedback` | ✅ | headline + summary; old score text as fallback |
+| B8 | Minutes from `estimatedMinutes` | ✅ | lesson header, plan "Up next", home "Ready for N minutes?" |
+| B9 | Mock mode: auth routes, retry, new fields | ✅ | mock accounts in localStorage, retry route |
+| C2 | Checks: types, lint, tests, SQL, build, HTTP smoke | ✅ | 98 tests; SQL 0004–0007; `next build`; smoke 26/26 incl. sign up, isolation, wrong password, logout; audit 0 |
 | C3 | Merge `backend` into `main` (local; push on approval) | ⏳ | |
 
 ### Verification at the end of M7

@@ -52,6 +52,9 @@ type Db = {
   attempts: StoredAttempt[]
   events: ReplanEvent[]
   mastery: (SkillMastery & { childId: string })[]
+  // Mock accounts. Passwords are kept as typed: this is a local demo only.
+  accounts: { id: string; name: string; email: string; password: string }[]
+  signedIn: string | null
 }
 
 const STORAGE_KEY = 'mock-api'
@@ -125,6 +128,8 @@ function load(): Db {
     attempts: [],
     events: [],
     mastery: [],
+    accounts: [],
+    signedIn: null,
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -382,6 +387,45 @@ async function createCurriculum(db: Db, raw: unknown) {
   return { status: 'created' as const, curriculum: publicCurriculum(db, curriculum) }
 }
 
+function auth(db: Db, action: string, body: unknown) {
+  const raw = typeof body === 'string' ? JSON.parse(body) : (body ?? {})
+  const email = String(raw.email ?? '').trim().toLowerCase()
+  const toUser = (account: Db['accounts'][number]) => ({ user: { id: account.id, email: account.email, name: account.name } })
+  switch (action) {
+    case 'signup': {
+      if (db.accounts.some((account) => account.email === email)) {
+        throw new MockError(409, 'conflict', 'An account with this email already exists.')
+      }
+      const account = { id: id(), name: String(raw.name ?? '').trim(), email, password: String(raw.password ?? '') }
+      db.accounts.push(account)
+      db.signedIn = account.id
+      return toUser(account)
+    }
+    case 'login': {
+      const account = db.accounts.find((candidate) => candidate.email === email && candidate.password === raw.password)
+      if (!account) throw new MockError(401, 'unauthorized', 'Wrong email or password.')
+      db.signedIn = account.id
+      return toUser(account)
+    }
+    case 'logout':
+      db.signedIn = null
+      return { ok: true }
+    case 'me': {
+      const account = db.accounts.find((candidate) => candidate.id === db.signedIn)
+      if (!account) throw new MockError(401, 'unauthorized', 'Sign in to continue.')
+      return toUser(account)
+    }
+    default:
+      throw new MockError(404, 'not_found', 'Not found.')
+  }
+}
+
+function retryLesson(db: Db, lessonId: string) {
+  const lesson = find(db.lessons, lessonId, 'Lesson')
+  if (lesson.contentStatus === 'failed') lesson.contentStatus = 'pending'
+  return getLesson(db, lessonId)
+}
+
 function getLesson(db: Db, lessonId: string) {
   const lesson = find(db.lessons, lessonId, 'Lesson')
   if (lesson.contentStatus === 'pending') {
@@ -510,8 +554,13 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return createCurriculum(db, body)
     case 'GET curricula/:id':
       return publicCurriculum(db, find(db.curricula, itemId, 'Curriculum'))
+    case 'POST auth/:id':
+    case 'GET auth/:id':
+      return auth(db, itemId, body)
     case 'GET lessons/:id':
       return getLesson(db, itemId)
+    case 'POST lessons/:id/retry':
+      return retryLesson(db, itemId)
     case 'POST lessons/:id/attempts':
       return submitAttempt(db, itemId, body)
     default:
