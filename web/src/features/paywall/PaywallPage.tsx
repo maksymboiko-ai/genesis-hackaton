@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Lock } from 'lucide-react'
+import { ArrowRight, Check, Lock } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/Button'
@@ -12,17 +12,17 @@ import { api } from '@/lib/api'
 import { PRICING } from '@/lib/config'
 import { subjectClass, subjectKey } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
-import { Checkout } from './Checkout'
+import { BILLINGS, OFFERS } from './billing'
+import type { Billing } from './billing'
 
 const PREVIEW = 3
 
-type Billing = 'yearly' | 'monthly'
 
 export function PaywallPage() {
   const router = useRouter()
   const planId = useSearchParams().get('plan')
   const [billing, setBilling] = useState<Billing>('yearly')
-  const [step, setStep] = useState<'plan' | 'pay'>('plan')
+  const [starting, setStarting] = useState(false)
 
   const loadPlan = useCallback(() => api.getCurriculum(planId!), [planId])
   const plan = useResource(planId ? loadPlan : null)
@@ -58,15 +58,13 @@ export function PaywallPage() {
     ? new Date(subscription.trialEndsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
     : null
   const rest = lessons.length - PREVIEW
-  const price = billing === 'yearly' ? PRICING.yearly : PRICING.monthly
-
-  const options: { value: Billing; label: string; price: string; badge?: string }[] = [
-    { value: 'yearly', label: 'Yearly', price: PRICING.yearly, badge: PRICING.yearlySaving },
-    { value: 'monthly', label: 'Monthly', price: PRICING.monthly },
-  ]
+  const note =
+    billing === 'trial'
+      ? `Nothing to pay today. Then ${PRICING.monthly} after ${PRICING.trialDays} days. Cancel anytime.`
+      : 'Cancel anytime.'
 
   return (
-    <main className={`${subjectClass(curriculum.subject)} flex min-h-dvh flex-col`}>
+    <main className={`${subjectClass(curriculum.subject)} paywall flex min-h-dvh flex-col`}>
       <div className="hidden px-8 py-5 md:block">
         <Wordmark />
       </div>
@@ -98,11 +96,6 @@ export function PaywallPage() {
                   {at + 1} · {lesson.title}
                   {at > 0 && <span className="sr-only"> (locked)</span>}
                 </span>
-                {at === 0 && (
-                  <span className="chip sm-chip ml-auto bg-sci-tint text-sci-ink" style={{ minHeight: 26, fontSize: 12 }}>
-                    Free
-                  </span>
-                )}
               </li>
             ))}
             {rest > 0 && (
@@ -116,9 +109,7 @@ export function PaywallPage() {
           </p>
         </div>
 
-        {step === 'pay' ? (
-          <Checkout billing={billing} onBack={() => setStep('plan')} onStarted={() => router.push(target)} />
-        ) : trialEnded ? (
+        {trialEnded ? (
           <div className="a-rise mt-auto flex flex-col gap-2.5 pb-6 md:mt-0 md:gap-3" style={{ animationDelay: '150ms' }}>
             <h2 className="mb-1.5 text-2xl leading-tight font-extrabold tracking-[-0.02em]">Your free trial has ended</h2>
             <StatusNote>
@@ -133,15 +124,16 @@ export function PaywallPage() {
           <div className="a-rise mt-auto flex flex-col gap-2.5 pb-6 md:mt-0 md:gap-3" style={{ animationDelay: '150ms' }}>
             <h2 className="mb-1.5 hidden text-2xl leading-tight font-extrabold tracking-[-0.02em] md:block">Choose a plan</h2>
             <div role="radiogroup" aria-label="Choose a plan" className="flex flex-col gap-2.5 md:gap-3">
-              {options.map((option) => {
-                const on = billing === option.value
+              {BILLINGS.map((value) => {
+                const option = OFFERS[value]
+                const on = billing === value
                 return (
                   <button
-                    key={option.value}
+                    key={value}
                     type="button"
                     role="radio"
                     aria-checked={on}
-                    onClick={() => setBilling(option.value)}
+                    onClick={() => setBilling(value)}
                     className={`opt ${on ? 'on' : ''}`}
                     style={{ minHeight: 72 }}
                   >
@@ -149,7 +141,10 @@ export function PaywallPage() {
                       <span className="flex items-center gap-2">
                         {option.label}
                         {option.badge && (
-                          <span className="chip bg-sun text-text" style={{ minHeight: 24, padding: '0 8px', fontSize: 12 }}>
+                          <span
+                            className="chip bg-sun-tint text-sun-ink"
+                            style={{ minHeight: 24, padding: '0 8px', fontSize: 12, boxShadow: 'inset 0 0 0 1px var(--sun)' }}
+                          >
                             {option.badge}
                           </span>
                         )}
@@ -161,18 +156,20 @@ export function PaywallPage() {
                 )
               })}
             </div>
-            <Button block className="mt-2" onClick={() => setStep('pay')}>
-              Start {PRICING.trial} free trial
-            </Button>
-            <p className="sm text-center">Then {price}. Cancel anytime. We’ll remind you before the trial ends.</p>
             <Button
-              variant="ghost"
+              variant="sun"
               block
-              onClick={() => router.push(lessons[0] ? `/app/lessons/${lessons[0].id}` : target)}
-              style={{ height: 44 }}
+              busy={starting}
+              className="mt-2"
+              onClick={() => {
+                setStarting(true)
+                router.push(`/paywall/checkout?plan=${curriculum.id}&billing=${billing}`)
+              }}
             >
-              Try lesson 1 first
+              Continue
+              <ArrowRight size={20} strokeWidth={2.4} aria-hidden="true" />
             </Button>
+            <p className="sm text-center">{note}</p>
           </div>
         )}
       </div>

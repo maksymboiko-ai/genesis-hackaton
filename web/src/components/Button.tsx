@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'subject' | 'onSubject'
+type Variant = 'primary' | 'secondary' | 'ghost' | 'subject' | 'onSubject' | 'sun'
 type Size = 'lg' | 'md' | 'sm'
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -16,6 +16,7 @@ const VARIANTS: Record<Variant, string> = {
   ghost: 'q',
   subject: 'subj',
   onSubject: 'onsubj',
+  sun: 'sun',
 }
 
 const SIZES: Record<Size, string> = { lg: '', md: 'md', sm: 'sm-btn' }
