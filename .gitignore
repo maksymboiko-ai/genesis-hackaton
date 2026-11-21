@@ -4,3 +4,4 @@
 .env.*
 !.env.example
 TASK_CONTEXT.md
+.codegraph/
