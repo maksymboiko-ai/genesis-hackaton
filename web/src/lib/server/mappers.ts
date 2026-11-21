@@ -1,0 +1,67 @@
+import "server-only";
+import {
+  ReplanDiagnosis,
+  SkillSlug,
+  type Curriculum,
+  type LessonSummary,
+  type ReplanEvent,
+} from "@/contracts/domain";
+import type { CurriculumRow, LessonRow, ReplanEventRow } from "./store/types";
+
+// Store rows → contract shapes. Responses are parsed through the contract
+// schemas again in ok(), so these only adapt names and formats.
+
+/** Postgres returns "+00:00"; the contracts want ISO with "Z". */
+export const iso = (value: string): string => new Date(value).toISOString();
+
+const validSkills = (skills: string[]) => skills.filter((s) => SkillSlug.safeParse(s).success);
+
+export function toLessonSummary(row: LessonRow): LessonSummary {
+  return {
+    id: row.id,
+    curriculumId: row.curriculumId,
+    position: row.position,
+    kind: row.kind,
+    title: row.title,
+    objective: row.objective,
+    skills: validSkills(row.skills),
+    retryOfLessonId: row.retryOfLessonId,
+    reason: row.reason,
+    estimatedMinutes: row.estimatedMinutes,
+    contentStatus: row.contentStatus,
+    completedAt: row.completedAt ? iso(row.completedAt) : null,
+    lastScore: row.lastScore,
+  };
+}
+
+export function toReplanEvent(row: ReplanEventRow): ReplanEvent {
+  const diagnosis = ReplanDiagnosis.safeParse(row.diagnosis);
+  return {
+    id: row.id,
+    curriculumId: row.curriculumId,
+    trigger: row.trigger,
+    diagnosis: diagnosis.success ? diagnosis.data : { summary: "", childMessage: "", mistakes: [], missingSkills: [] },
+    insertedLessonIds: row.insertedLessonIds,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+export function toCurriculumListItem(row: CurriculumRow): Omit<Curriculum, "lessons" | "replanEvents"> {
+  return {
+    id: row.id,
+    childId: row.childId,
+    bookId: row.bookId,
+    prompt: row.prompt,
+    subject: row.subject,
+    title: row.title,
+    replanStatus: row.replanStatus,
+  };
+}
+
+export function toCurriculum(row: CurriculumRow, lessons: LessonRow[], events: ReplanEventRow[]): Curriculum {
+  return {
+    ...toCurriculumListItem(row),
+    lessons: lessons.map(toLessonSummary),
+    replanEvents: events.map(toReplanEvent),
+  };
+}

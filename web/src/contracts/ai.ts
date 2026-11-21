@@ -25,7 +25,7 @@ import {
 // One model call, reported through AiCallOptions.onCall. The backend writes
 // these to the llm_call table; evals collect them in memory.
 export type LlmCallRecord = {
-  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "embed";
+  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "feedback" | "embed";
   model: string;
   latencyMs: number;
   inputTokens: number | null;
@@ -51,10 +51,16 @@ export const LessonOutline = z.object({
 });
 export type LessonOutline = z.infer<typeof LessonOutline>;
 
+// Added to every lesson the model plans (outline and replan): whole minutes
+// the lesson takes, reading and quiz together, at the learner's grade.
+// Checked in code: rounded and kept within 3 to 30.
+const Timing = { estimatedMinutes: z.number() };
+
 // A lesson in a new curriculum. bookSectionIndex is the BookSection the
 // lesson is taught from; null when there is no book or no section fits.
 export const OutlineLesson = LessonOutline.extend({
   bookSectionIndex: z.number().nullable(),
+  ...Timing,
 });
 export type OutlineLesson = z.infer<typeof OutlineLesson>;
 
@@ -76,6 +82,7 @@ export const OutlineDraft = z.object({
     LessonOutline.extend({
       // -1 when the lesson is not taught from a book section.
       bookSectionIndex: z.number(),
+      ...Timing,
     }),
   ),
 });
@@ -109,7 +116,10 @@ export const GeneratedQuestion = z.object({
   choices: z.array(z.string()),
   // Zero-based index into choices.
   correctIndex: z.number(),
-  explanation: z.string(),
+  // One entry per choice, in the same order: what to tell a child who
+  // picked it. Becomes Question.choiceFeedback; the entry at correctIndex
+  // is also stored as Question.explanation.
+  choiceFeedback: z.array(z.string()),
   // One of the lesson's skills.
   skill: z.string(),
 });
@@ -121,18 +131,35 @@ export const LessonOutput = z.object({
 });
 export type LessonOutput = z.infer<typeof LessonOutput>;
 
+// A lesson a replan adds. reason is one sentence to the child on why the
+// lesson is in the plan; the backend stores it in lesson.reason.
+export const PlannedLesson = LessonOutline.extend({
+  reason: z.string(),
+  ...Timing,
+});
+export type PlannedLesson = z.infer<typeof PlannedLesson>;
+
 // The model only proposes new lessons. The backend decides where they go and
 // adds the retry lessons itself.
 export const ReplanOutput = z.object({
   diagnosis: z.object({
     summary: z.string(),
+    childMessage: z.string(),
     mistakes: z.array(z.string()),
     missingSkills: z.array(z.string()),
   }),
   // "struggling": remedial lessons. "excelling": extension lessons.
-  newLessons: z.array(LessonOutline),
+  newLessons: z.array(PlannedLesson),
 });
 export type ReplanOutput = z.infer<typeof ReplanOutput>;
+
+// What the model says to the child right after a quiz: a short headline and
+// one or two sentences about this attempt (what held up, what to look at).
+export const AttemptFeedbackOutput = z.object({
+  headline: z.string(),
+  summary: z.string(),
+});
+export type AttemptFeedbackOutput = z.infer<typeof AttemptFeedbackOutput>;
 
 export const LearnerNotesOutput = z.object({
   notes: z.string(),
@@ -202,6 +229,15 @@ export type PreparedBook = {
   }[];
 };
 
+export type AttemptFeedbackInput = {
+  gradeLevel: number;
+  subject: string;
+  // The attempt, with each wrong answer as text.
+  attempt: LessonAttemptSummary;
+  // The questions answered correctly, so the feedback can name what held up.
+  rightAnswers: { prompt: string; answer: string; skill: string }[];
+};
+
 export type UpdateLearnerNotesInput = {
   previousNotes: string;
   gradeLevel: number;
@@ -226,12 +262,19 @@ export interface AiService {
   replan(
     input: ReplanInput,
     options?: AiCallOptions,
-  ): Promise<{ diagnosis: ReplanDiagnosis; newLessons: LessonOutline[] }>;
+  ): Promise<{ diagnosis: ReplanDiagnosis; newLessons: PlannedLesson[] }>;
 
   updateLearnerNotes(
     input: UpdateLearnerNotesInput,
     options?: AiCallOptions,
   ): Promise<LearnerNotesOutput>;
+
+  // Feedback shown with the quiz results. The backend calls it while the
+  // attempt is submitted and falls back to a plain message on failure.
+  writeAttemptFeedback(
+    input: AttemptFeedbackInput,
+    options?: AiCallOptions,
+  ): Promise<AttemptFeedbackOutput>;
 
   // Book ingestion in one step: splits the text into chunks, maps the
   // book's sections and embeds every chunk. The backend stores the result.

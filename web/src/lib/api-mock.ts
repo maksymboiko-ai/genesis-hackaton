@@ -52,6 +52,9 @@ type Db = {
   attempts: StoredAttempt[]
   events: ReplanEvent[]
   mastery: (SkillMastery & { childId: string })[]
+  // Mock accounts. Passwords are kept as typed: this is a local demo only.
+  accounts: { id: string; name: string; email: string; password: string }[]
+  signedIn: string | null
 }
 
 const STORAGE_KEY = 'mock-api'
@@ -125,6 +128,8 @@ function load(): Db {
     attempts: [],
     events: [],
     mastery: [],
+    accounts: [],
+    signedIn: null,
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -156,8 +161,9 @@ function newLesson(
   curriculumId: string,
   position: number,
   kind: LessonKind,
-  outline: { title: string; objective: string; skills: string[] },
+  outline: { title: string; objective: string; skills: string[]; estimatedMinutes?: number },
   retryOfLessonId: string | null = null,
+  reason: string | null = null,
 ): StoredLesson {
   return {
     id: id(),
@@ -168,6 +174,9 @@ function newLesson(
     objective: outline.objective,
     skills: outline.skills,
     retryOfLessonId,
+    reason,
+    // Mock only: the backend takes the model's estimate, then computes it from the content.
+    estimatedMinutes: outline.estimatedMinutes ?? 6 + (outline.title.length % 6),
     contentStatus: 'pending',
     completedAt: null,
     lastScore: null,
@@ -203,6 +212,11 @@ function buildContent(lesson: StoredLesson): LessonContent {
       choices: [...question.choices],
       correctIndex: question.correct,
       explanation: question.why,
+      // What a child who picked each choice is told; the real lesson model
+      // names the slip behind each wrong choice.
+      choiceFeedback: question.choices.map((choice, index) =>
+        index === question.correct ? question.why : `"${choice}" is not it. ${question.why}`,
+      ),
       skill,
     })),
   }
@@ -233,11 +247,20 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
           title: `${label(skill).charAt(0).toUpperCase()}${label(skill).slice(1)}, step by step`,
           objective: `Go back over ${label(skill)} in smaller steps before moving on.`,
           skills: [skill],
-        }),
+        }, null, `Your answers on ${label(skill)} went different ways, so we start from the idea underneath it.`),
       ),
     )
     failed.forEach((lesson) =>
-      inserted.push(newLesson(curriculum.id, start + inserted.length, 'retry', lesson, lesson.id)),
+      inserted.push(
+        newLesson(
+          curriculum.id,
+          start + inserted.length,
+          'retry',
+          lesson,
+          lesson.id,
+          'A second try at this lesson, now that the review lessons are behind you.',
+        ),
+      ),
     )
     lessons
       .filter((lesson) => lesson.position >= start)
@@ -251,6 +274,7 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
         (skill) =>
           `${wrong.filter((result) => result.skill === skill).length} missed answers on ${label(skill)} across the last ${window.length} quizzes.`,
       ),
+      childMessage: 'Your answers showed us exactly where things slip. A couple of short lessons come first, so the next part feels easier.',
       missingSkills,
     }
   } else {
@@ -259,10 +283,11 @@ function applyReplan(db: Db, curriculum: StoredCurriculum, now: number) {
         title: 'Going further',
         objective: 'Harder problems that build on everything so far.',
         skills: ['advanced-problems'],
-      }),
+      }, null, 'You got nearly everything right three lessons in a row, so here is something harder.'),
     )
     diagnosis = {
       summary: `${window.length} strong quizzes in a row. Time for something harder.`,
+      childMessage: 'You are ahead of the plan, so we added a challenge lesson at the end.',
       mistakes: [],
       missingSkills: [],
     }
@@ -362,6 +387,45 @@ async function createCurriculum(db: Db, raw: unknown) {
   return { status: 'created' as const, curriculum: publicCurriculum(db, curriculum) }
 }
 
+function auth(db: Db, action: string, body: unknown) {
+  const raw = typeof body === 'string' ? JSON.parse(body) : (body ?? {})
+  const email = String(raw.email ?? '').trim().toLowerCase()
+  const toUser = (account: Db['accounts'][number]) => ({ user: { id: account.id, email: account.email, name: account.name } })
+  switch (action) {
+    case 'signup': {
+      if (db.accounts.some((account) => account.email === email)) {
+        throw new MockError(409, 'conflict', 'An account with this email already exists.')
+      }
+      const account = { id: id(), name: String(raw.name ?? '').trim(), email, password: String(raw.password ?? '') }
+      db.accounts.push(account)
+      db.signedIn = account.id
+      return toUser(account)
+    }
+    case 'login': {
+      const account = db.accounts.find((candidate) => candidate.email === email && candidate.password === raw.password)
+      if (!account) throw new MockError(401, 'unauthorized', 'Wrong email or password.')
+      db.signedIn = account.id
+      return toUser(account)
+    }
+    case 'logout':
+      db.signedIn = null
+      return { ok: true }
+    case 'me': {
+      const account = db.accounts.find((candidate) => candidate.id === db.signedIn)
+      if (!account) throw new MockError(401, 'unauthorized', 'Sign in to continue.')
+      return toUser(account)
+    }
+    default:
+      throw new MockError(404, 'not_found', 'Not found.')
+  }
+}
+
+function retryLesson(db: Db, lessonId: string) {
+  const lesson = find(db.lessons, lessonId, 'Lesson')
+  if (lesson.contentStatus === 'failed') lesson.contentStatus = 'pending'
+  return getLesson(db, lessonId)
+}
+
 function getLesson(db: Db, lessonId: string) {
   const lesson = find(db.lessons, lessonId, 'Lesson')
   if (lesson.contentStatus === 'pending') {
@@ -397,7 +461,7 @@ function submitAttempt(db: Db, lessonId: string, raw: unknown) {
       chosenIndex: answer.chosenIndex,
       correctIndex: question.correctIndex,
       correct: answer.chosenIndex === question.correctIndex,
-      explanation: question.explanation,
+      explanation: question.choiceFeedback?.[answer.chosenIndex] ?? question.explanation,
     }
   })
   const score = results.filter((result) => result.correct).length / results.length
@@ -436,7 +500,15 @@ function submitAttempt(db: Db, lessonId: string, raw: unknown) {
   }
 
   const next = lessonsOf(db, curriculum.id).find((candidate) => !candidate.completedAt)
-  return { attemptId: attempt.id, score, results, replanTriggered, nextLessonId: next?.id ?? null }
+  const right = results.filter((result) => result.correct).length
+  const misses = results.length - right
+  const feedback =
+    misses === 0
+      ? { headline: 'All of them held up.', summary: `${right} of ${results.length}. Nothing to look at again.` }
+      : score >= STRUGGLING_BELOW
+        ? { headline: 'Nice work.', summary: `${right} of ${results.length}. ${misses === 1 ? 'One' : misses} to look at again, below.` }
+        : { headline: "This one was tricky. That's useful to know.", summary: `${right} of ${results.length}. The notes below show where it slipped.` }
+  return { attemptId: attempt.id, score, results, feedback, replanTriggered, nextLessonId: next?.id ?? null }
 }
 
 async function route(db: Db, method: string, parts: string[], query: URLSearchParams, body: unknown) {
@@ -482,8 +554,13 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return createCurriculum(db, body)
     case 'GET curricula/:id':
       return publicCurriculum(db, find(db.curricula, itemId, 'Curriculum'))
+    case 'POST auth/:id':
+    case 'GET auth/:id':
+      return auth(db, itemId, body)
     case 'GET lessons/:id':
       return getLesson(db, itemId)
+    case 'POST lessons/:id/retry':
+      return retryLesson(db, itemId)
     case 'POST lessons/:id/attempts':
       return submitAttempt(db, itemId, body)
     default:

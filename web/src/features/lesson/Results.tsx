@@ -127,7 +127,8 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
               />
             ))}
           </div>
-          <p className="sub text-[18px]! text-text!">{headline(right, total)}</p>
+          <p className="sub text-[18px]! text-text!">{result.feedback.headline || headline(right, total)}</p>
+          {result.feedback.summary && <p className="sm">{result.feedback.summary}</p>}
 
           {result.replanTriggered && (
             <div

@@ -7,6 +7,7 @@ import type { FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/Button'
 import { TextField } from '@/components/TextField'
+import { api, ApiRequestError } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { AuthShell } from './AuthShell'
 
@@ -29,6 +30,7 @@ export function SignUpPage() {
   const [fields, setFields] = useState<Fields>({ name: '', email: '', password: '' })
   const [errors, setErrors] = useState<Errors>({})
   const [submitting, setSubmitting] = useState(false)
+  const [failed, setFailed] = useState('')
 
   const bind = (key: keyof Fields) => ({
     name: key,
@@ -40,19 +42,36 @@ export function SignUpPage() {
     },
   })
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const form = event.currentTarget
     const found = validate(fields)
     setErrors(found)
     const firstInvalid = (Object.keys(found) as (keyof Fields)[])[0]
     if (firstInvalid) {
-      event.currentTarget.querySelector<HTMLInputElement>(`[name="${firstInvalid}"]`)?.focus()
+      form.querySelector<HTMLInputElement>(`[name="${firstInvalid}"]`)?.focus()
       return
     }
 
     setSubmitting(true)
-    setUser({ name: fields.name.trim(), email: fields.email.trim() })
-    router.push('/quiz')
+    setFailed('')
+    try {
+      const { user } = await api.signUp({
+        name: fields.name.trim(),
+        email: fields.email.trim(),
+        password: fields.password,
+      })
+      setUser({ name: user.name, email: user.email })
+      router.push('/quiz')
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.code === 'conflict') {
+        setErrors({ email: 'This email already has an account. Sign in instead.' })
+        form.querySelector<HTMLInputElement>('[name="email"]')?.focus()
+      } else {
+        setFailed('Could not create your account. Try again.')
+      }
+      setSubmitting(false)
+    }
   }
 
   const errorCount = Object.values(errors).filter(Boolean).length
@@ -67,6 +86,12 @@ export function SignUpPage() {
           <p role="alert" className="a-fade flex items-start gap-2 rounded-[14px] bg-danger-soft px-4 py-3 text-sm font-bold text-danger">
             <CircleAlert size={18} strokeWidth={2.2} aria-hidden="true" className="mt-px flex-none" />
             {errorCount === 1 ? 'Fix 1 field to continue.' : `Fix ${errorCount} fields to continue.`}
+          </p>
+        )}
+        {failed && errorCount === 0 && (
+          <p role="alert" className="a-fade flex items-start gap-2 rounded-[14px] bg-danger-soft px-4 py-3 text-sm font-bold text-danger">
+            <CircleAlert size={18} strokeWidth={2.2} aria-hidden="true" className="mt-px flex-none" />
+            {failed}
           </p>
         )}
         <TextField label="Your name" autoComplete="name" {...bind('name')} />

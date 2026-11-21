@@ -95,6 +95,12 @@ export const LessonSummary = z.object({
   objective: z.string(),
   skills: z.array(SkillSlug),
   retryOfLessonId: Id.nullable(),
+  // Why the lesson is in the plan, in one sentence addressed to the child.
+  // Null for core lessons; set for lessons a replan added.
+  reason: z.string().nullable(),
+  // Expected minutes, reading and quiz together. The model's estimate from
+  // the outline until the content is ready, then computed from the content.
+  estimatedMinutes: z.number().int().min(1).max(60),
   contentStatus: ContentStatus,
   completedAt: z.string().datetime().nullable(),
   lastScore: z.number().min(0).max(1).nullable(),
@@ -108,10 +114,14 @@ export const Question = z.object({
   prompt: z.string(),
   choices: z.array(z.string()).length(CHOICES_PER_QUESTION),
   correctIndex: z.number().int().min(0).max(CHOICES_PER_QUESTION - 1),
+  // Why the correct choice is right.
   explanation: z.string(),
+  // What to tell a child who picked each choice, in the order of choices:
+  // for a wrong choice, the slip that leads to it and the right way.
+  choiceFeedback: z.array(z.string()).length(CHOICES_PER_QUESTION),
   skill: SkillSlug,
 });
-export type Question = z.infer<typeof Question>;
+export type Question= z.infer<typeof Question>;
 
 // Stored in lesson.content once contentStatus is "ready".
 export const LessonContent = z.object({
@@ -126,6 +136,7 @@ export const QuestionResult = z.object({
   chosenIndex: z.number().int().min(0).max(CHOICES_PER_QUESTION - 1),
   correctIndex: z.number().int().min(0).max(CHOICES_PER_QUESTION - 1),
   correct: z.boolean(),
+  // The feedback for the choice the child picked (Question.choiceFeedback).
   explanation: z.string(),
 });
 export type QuestionResult = z.infer<typeof QuestionResult>;
@@ -147,7 +158,10 @@ export const LearnerProfile = z.object({
 export type LearnerProfile = z.infer<typeof LearnerProfile>;
 
 export const ReplanDiagnosis = z.object({
+  // For the parent: what happened and what changes.
   summary: z.string(),
+  // For the child: the same news in one or two encouraging sentences.
+  childMessage: z.string(),
   mistakes: z.array(z.string()),
   missingSkills: z.array(SkillSlug),
 });

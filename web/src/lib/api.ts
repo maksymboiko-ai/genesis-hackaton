@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import {
   ApiError,
+  AuthResponse,
   CreateBookResponse,
   CreateChildResponse,
   CreateCurriculumResponse,
@@ -11,14 +12,19 @@ import {
   ListBooksResponse,
   ListChildrenResponse,
   ListCurriculaResponse,
+  LogoutResponse,
+  RetryLessonResponse,
   SubmitAttemptResponse,
 } from '@/contracts/api'
 import type {
   CreateChildRequest,
   CreateCurriculumRequest,
+  LoginRequest,
+  SignUpRequest,
   SubmitAttemptRequest,
 } from '@/contracts/api'
 import { mockFetch } from './api-mock'
+import { clearSession } from './session'
 
 const USE_MOCK = process.env.NEXT_PUBLIC_API_MOCK !== 'false'
 
@@ -39,6 +45,15 @@ async function request<S extends z.ZodType>(
   const response = USE_MOCK ? await mockFetch(path, init) : await fetch(`/api${path}`, init)
   const body: unknown = await response.json().catch(() => null)
 
+  // The session is gone (expired or signed out elsewhere): back to sign-in.
+  // Auth endpoints handle their own 401s (wrong password, not signed in).
+  if (response.status === 401 && !path.startsWith('/auth/') && typeof window !== 'undefined') {
+    clearSession()
+    // A full page load on purpose: it drops every in-memory screen state.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign('/login')
+  }
+
   if (!response.ok) {
     const parsed = ApiError.safeParse(body)
     throw parsed.success
@@ -56,6 +71,12 @@ const post = (body: unknown): RequestInit => ({
 })
 
 export const api = {
+  // Accounts. The session lives in httpOnly cookies the server sets.
+  signUp: (body: SignUpRequest) => request(AuthResponse, '/auth/signup', post(body)),
+  logIn: (body: LoginRequest) => request(AuthResponse, '/auth/login', post(body)),
+  logOut: () => request(LogoutResponse, '/auth/logout', { method: 'POST' }),
+  me: () => request(AuthResponse, '/auth/me'),
+
   listChildren: () => request(ListChildrenResponse, '/children'),
   createChild: (body: CreateChildRequest) => request(CreateChildResponse, '/children', post(body)),
   getProfile: (childId: string) => request(GetProfileResponse, `/children/${childId}/profile`),
@@ -77,6 +98,9 @@ export const api = {
     request(GetCurriculumResponse, `/curricula/${curriculumId}`),
 
   getLesson: (lessonId: string) => request(GetLessonResponse, `/lessons/${lessonId}`),
+  // "Try again" on a failed lesson.
+  retryLesson: (lessonId: string) =>
+    request(RetryLessonResponse, `/lessons/${lessonId}/retry`, { method: 'POST' }),
   submitAttempt: (lessonId: string, body: SubmitAttemptRequest) =>
     request(SubmitAttemptResponse, `/lessons/${lessonId}/attempts`, post(body)),
 }

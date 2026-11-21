@@ -173,7 +173,11 @@ To stop skill names drifting ("linear-equations" and "solving-linear-equations")
 4. **A lesson is written from its section.** If the section has at most `LESSON_CHUNK_LIMIT` chunks, the backend passes all of them. Otherwise it embeds the lesson's title and objective and calls `match_book_chunks` with the section index for the nearest `LESSON_CHUNK_LIMIT`. Either way the chunks go into `sourceChunks` in reading order (by `chunk_index`).
 5. A lesson with no section (a remedial or extension lesson) searches the whole book the same way, without the section index. A retry lesson keeps the section of the lesson it repeats.
 
-Retrieval is always scoped to one book by `book_id`, so one family's upload never reaches another's lessons. Books have no owner yet (see [Out of scope](#out-of-scope-for-the-mvp)), so every book is listed for everyone.
+Retrieval is always scoped to one book by `book_id`, so one family's upload never reaches another's lessons. Each book belongs to the parent who uploaded it and is listed only for them (see [Accounts](#accounts)).
+
+## Accounts
+
+Parents sign up and sign in through `/api/auth/*`; the backend calls Supabase Auth and keeps the session in two httpOnly cookies scoped to `/api`, so the browser still only talks to `/api` and never sees a token. Every other endpoint needs a session (401 otherwise). Children and books have an `owner_id`; curricula, lessons and attempts belong to the parent through the child. A request for another family's data answers 404. See ADR 0004.
 
 ## Models and evals
 
@@ -207,12 +211,11 @@ A change to anything in `web/src/contracts/` or `supabase/migrations/` goes in i
 
 ## Out of scope for the MVP
 
-- **Real accounts.** The sign-up screen is a mock. The backend has no auth and the app shows a child picker.
-- **Row-level security.** All database access is server-side with the service role key.
+- **Row-level security policies.** All database access is server-side with the service role key; RLS is on with no policies, so Supabase's client roles see nothing (ADR 0003). Ownership is checked in the backend (ADR 0004).
 - **Streaming lesson text.** Lessons are generated ahead of time and fetched by polling.
 - **Free-text answers.** Quizzes are multiple choice with 4 options, graded in code.
 - **Scanned textbooks.** Only PDFs with a text layer are supported.
-- **Book ownership.** A book has no owner; it arrives with real accounts.
+- **Email verification.** Accounts are created confirmed.
 - **Other languages.** English only.
 
 ## Known risks

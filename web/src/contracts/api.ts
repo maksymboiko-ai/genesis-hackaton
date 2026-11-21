@@ -20,11 +20,49 @@ import {
 // Every non-2xx response has this body.
 export const ApiError = z.object({
   error: z.object({
-    code: z.enum(["bad_request", "not_found", "conflict", "internal"]),
+    // unauthorized: no valid session (401), or a cross-site request (403).
+    code: z.enum(["bad_request", "unauthorized", "not_found", "conflict", "internal"]),
     message: z.string(),
   }),
 });
 export type ApiError = z.infer<typeof ApiError>;
+
+// --- Accounts ---------------------------------------------------------------
+// Parents sign up and sign in through these endpoints; the session lives in
+// two httpOnly cookies set by the server (sb-access, sb-refresh, Path=/api),
+// so the browser sends it with every /api request and JavaScript never sees
+// the tokens. Every other endpoint needs a session and answers 401
+// "unauthorized" without one. A parent only ever sees their own children,
+// curricula, lessons and books; anything else is "not_found".
+
+export const AuthUser = z.object({
+  id: Id,
+  email: z.string(),
+  name: z.string(),
+});
+export type AuthUser = z.infer<typeof AuthUser>;
+
+// POST /auth/signup — creates the account and signs in.
+export const SignUpRequest = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.email().max(254),
+  password: z.string().min(8).max(72),
+});
+export type SignUpRequest = z.infer<typeof SignUpRequest>;
+
+// POST /auth/login
+export const LoginRequest = z.object({
+  email: z.email().max(254),
+  password: z.string().min(1).max(72),
+});
+export type LoginRequest = z.infer<typeof LoginRequest>;
+
+// Response of signup, login and GET /auth/me.
+export const AuthResponse = z.object({ user: AuthUser });
+export type AuthResponse = z.infer<typeof AuthResponse>;
+
+// POST /auth/logout — ends the session and clears the cookies. No body.
+export const LogoutResponse = z.object({ ok: z.literal(true) });
 
 // --- Children -------------------------------------------------------------
 
@@ -93,10 +131,12 @@ export const GetCurriculumResponse = Curriculum;
 
 // --- Lessons --------------------------------------------------------------
 
-// A question as the child sees it: no answer, no explanation.
+// A question as the child sees it: no answer, no explanation, no per-choice
+// feedback (it gives the answer away).
 export const PublicQuestion = Question.omit({
   correctIndex: true,
   explanation: true,
+  choiceFeedback: true,
 });
 export type PublicQuestion = z.infer<typeof PublicQuestion>;
 
@@ -113,6 +153,13 @@ export const GetLessonResponse = LessonSummary.extend({
     .nullable(),
 });
 export type GetLessonResponse = z.infer<typeof GetLessonResponse>;
+
+// POST /lessons/:lessonId/retry
+// The "Try again" button for a lesson whose contentStatus is "failed": starts
+// generation again at once. (A GET retries a failed lesson only a minute
+// after the failure, so polling never loops on paid retries.) A lesson that
+// is ready or still generating is returned as it is. No body.
+export const RetryLessonResponse = GetLessonResponse;
 
 // POST /lessons/:lessonId/attempts
 // Every question must be answered exactly once.
@@ -135,6 +182,10 @@ export const SubmitAttemptResponse = z.object({
   attemptId: Id,
   score: z.number().min(0).max(1),
   results: z.array(QuestionResult),
+  // Shown above the results, to the child. headline: a few words ("Nice. The
+  // sign is starting to stick."); summary: one or two sentences on what held
+  // up and what to look at again.
+  feedback: z.object({ headline: z.string(), summary: z.string() }),
   replanTriggered: ReplanTrigger.nullable(),
   nextLessonId: Id.nullable(),
 });
