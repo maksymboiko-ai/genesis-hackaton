@@ -258,7 +258,23 @@ const Count = z.number().int().min(0);
 // ADMIN_EMAILS; every other account gets "not_found".
 export const AdminAnalyticsResponse = z.object({
   generatedAt: z.string().datetime(),
-  // The key metric (RECOVERY_TARGET in domain.ts).
+  // The key metric, the pilot's goal (GAP_CLOSE_TARGET in domain.ts): the
+  // share of the learning gaps found that are closed.
+  gaps: z.object({
+    // closed / found.
+    rate: Rate,
+    target: z.number(),
+    // Remedial lessons added by replans: one gap each.
+    found: Count,
+    // Gaps whose remedial quiz the child has taken, and those closed: first
+    // try scored GAP_CLOSED_FROM or above.
+    tested: Count,
+    closed: Count,
+    // The first-try score that closes a gap.
+    closedFrom: z.number(),
+    bySubject: z.array(z.object({ subject: z.string(), found: Count, tested: Count, closed: Count, rate: Rate })),
+  }),
+  // Supporting metric (RECOVERY_TARGET in domain.ts).
   recovery: z.object({
     // passed / taken.
     rate: Rate,
@@ -268,7 +284,6 @@ export const AdminAnalyticsResponse = z.object({
     // Retries the child has done, and those scored at the pass mark or above.
     taken: Count,
     passed: Count,
-    bySubject: z.array(z.object({ subject: z.string(), taken: Count, passed: Count, rate: Rate })),
   }),
   // Guardrail: learners who finished WEEK_ONE_LESSONS lessons within 7 days
   // of being added. rate = reached / learners.
@@ -280,14 +295,20 @@ export const AdminAnalyticsResponse = z.object({
     // Learners still inside their first 7 days; they may yet reach it.
     inFirstWeek: Count,
   }),
-  // Guardrail: of the trials that are over (ended or paid), the share paid.
-  trialToPaid: z.object({
-    rate: Rate,
-    benchmark: z.number(),
+  // The pilot's payment goal: families that paid, against paidTarget.
+  payment: z.object({
+    // Accounts with paid_at set.
+    paid: Count,
+    paidTarget: Count,
+    // Parent accounts with a learner, against the pilot's size.
+    families: Count,
+    familiesTarget: Count,
     trialsStarted: Count,
     trialsActive: Count,
+    // Trials that ended or were paid; trialToPaid = paid / trialsOver.
     trialsOver: Count,
-    paid: Count,
+    trialToPaid: Rate,
+    benchmark: z.number(),
   }),
   usage: z.object({
     parents: Count,

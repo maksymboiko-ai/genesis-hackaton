@@ -355,12 +355,27 @@ export type Subscription = z.infer<typeof Subscription>;
 
 // --- Product metrics --------------------------------------------------------
 
-// The key MVP metric. Recovery rate: of the retry lessons children took, the
+// The pilot: PILOT_FAMILIES families, one child each, PILOT_WEEKS weeks.
+export const PILOT_FAMILIES = 30;
+export const PILOT_WEEKS = 4;
+
+// The pilot's goal: close at least this share of the learning gaps the app
+// finds. A gap is found when a replan adds a remedial lesson; each remedial
+// lesson is one gap.
+export const GAP_CLOSE_TARGET = 0.6;
+// A gap is closed when the child, on the first try at the remedial lesson's
+// quiz (new questions on the same skill, no hints), gets this share right:
+// 3 of 4.
+export const GAP_CLOSED_FROM = 0.75;
+
+// Supporting metric. Recovery rate: of the retry lessons children took, the
 // share they passed. A retry exists for each lesson failed (scored below
 // STRUGGLING_BELOW) in a "struggling" replan window, and comes after the
 // remedial lessons; it is passed at STRUGGLING_BELOW or above.
 export const RECOVERY_TARGET = 0.6;
 // Guardrail: a learner should finish this many lessons in their first 7 days.
 export const WEEK_ONE_LESSONS = 3;
-// Guardrail: trial-to-paid conversion, compared with the industry median.
+// The pilot's payment goal: this many families pay for the next month.
+export const PILOT_PAID_FAMILIES_TARGET = 6;
+// For reference: the industry median trial-to-paid conversion.
 export const TRIAL_TO_PAID_BENCHMARK = 0.35;

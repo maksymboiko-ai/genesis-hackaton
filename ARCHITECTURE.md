@@ -212,9 +212,10 @@ Parents sign up and sign in through `/api/auth/*`; the backend calls Supabase Au
 
 | Metric | Definition |
 |---|---|
-| **Recovery rate** (key metric, target 60%) | Of the `retry` lessons children have taken, the share scored 0.6 or above. A retry is scheduled for each lesson failed in a struggling window and comes after the remedial lessons. Retries not taken yet are not counted. |
+| **Gaps closed** (key metric, pilot goal 60% in 4 weeks) | Closed gaps divided by gaps found. A gap is found when a replan adds a `remedial` lesson; each remedial lesson is one gap. It is closed when the child's first attempt at that lesson's quiz (new questions on the same skill, no hints) scores 0.75 or above, the pilot's 3 of 4. Gaps not tested yet count as open. |
+| Recovery rate (supporting, target 60%) | Of the `retry` lessons children have taken, the share scored 0.6 or above. A retry is scheduled for each lesson failed in a struggling window and comes after the remedial lessons. |
 | 3 lessons in week 1 (guardrail) | The share of learners who finished 3 lessons within 7 days of being added |
-| Trial-to-paid (guardrail, benchmark 35%) | Of the trials that are over (ended, or paid early), the share with `paid_at` set |
+| Families paying (pilot goal 6 of 30) | Accounts with `paid_at` set. Trial-to-paid is shown beside it: of the trials that are over (ended, or paid early), the share paid, against the 35% industry median. |
 | AI | From `llm_call`, last 30 days: calls, failures, latency and tokens per task and model, and calls per day |
 
 ## Models and evals
