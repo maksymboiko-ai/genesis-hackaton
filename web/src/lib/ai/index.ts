@@ -2,6 +2,7 @@
 // pure functions, validated return values, one retry on invalid output.
 import { randomUUID } from "node:crypto";
 import {
+  BookMapOutput,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
   LearnerNotesOutput,
@@ -15,15 +16,18 @@ import {
   CHOICES_PER_QUESTION,
   LessonContent,
   MAX_CLARIFYING_QUESTIONS,
+  type BookSection,
 } from "@/contracts/domain";
 import { chunkText } from "./chunk";
 import { callEmbeddings, callStructured, InvalidOutputError } from "./client";
 import { DEFAULT_MODELS } from "./models";
 import {
+  bookMapPrompt,
   learnerNotesPrompt,
   lessonPrompt,
   outlinePrompt,
   replanPrompt,
+  sectionLabel,
 } from "./prompts";
 
 // OpenRouter's embeddings endpoint takes a batch; keep requests modest.
@@ -44,7 +48,7 @@ function nonEmpty(text: string, what: string): string {
   return trimmed;
 }
 
-function checkLessonOutlines(lessons: LessonOutline[]): LessonOutline[] {
+function checkLessonOutlines<T extends LessonOutline>(lessons: T[]): T[] {
   if (!lessons.length) throw new InvalidOutputError("lessons is empty");
   return lessons.map((lesson, index) => {
     const skills = [...new Set(lesson.skills.map(toSlug).filter(Boolean))];
@@ -52,6 +56,7 @@ function checkLessonOutlines(lessons: LessonOutline[]): LessonOutline[] {
       throw new InvalidOutputError(`lesson ${index + 1} has no valid skills`);
     }
     return {
+      ...lesson,
       title: nonEmpty(lesson.title, `lesson ${index + 1} title`),
       objective: nonEmpty(lesson.objective, `lesson ${index + 1} objective`),
       skills,
@@ -84,7 +89,16 @@ export const aiService: AiService = {
           outline: {
             subject: nonEmpty(draft.subject, "subject").toLowerCase(),
             title: nonEmpty(draft.title, "title"),
-            lessons: checkLessonOutlines(draft.lessons),
+            lessons: checkLessonOutlines(draft.lessons).map((lesson) => ({
+              ...lesson,
+              // -1, or anything else that is not a section of this book,
+              // means the lesson has no section.
+              bookSectionIndex: input.bookSections.some(
+                (s) => s.index === lesson.bookSectionIndex,
+              )
+                ? lesson.bookSectionIndex
+                : null,
+            })),
           },
         };
       },
@@ -186,7 +200,67 @@ export const aiService: AiService = {
     });
   },
 
-  chunkText,
+  async prepareBook(input, options) {
+    const chunks = chunkText(input.text);
+    if (!chunks.length) throw new Error("The book has no text to prepare");
+
+    const sections = await callStructured({
+      task: "book_map",
+      model: options?.model ?? DEFAULT_MODELS.book_map,
+      ...bookMapPrompt(input.title, chunks),
+      schemaName: "book_map",
+      schema: BookMapOutput,
+      onCall: options?.onCall,
+      check: (output) => {
+        // Keep the sections whose start is a real chunk, in order, one per
+        // start. The book always begins inside the first section.
+        const starts = new Set<number>();
+        const valid = output.sections
+          .filter(
+            (s) =>
+              Number.isInteger(s.firstChunk) &&
+              s.firstChunk >= 0 &&
+              s.firstChunk < chunks.length &&
+              s.title.trim(),
+          )
+          .sort((a, b) => a.firstChunk - b.firstChunk)
+          .filter((s) => !starts.has(s.firstChunk) && starts.add(s.firstChunk));
+        if (!valid.length) {
+          throw new InvalidOutputError("no section starts at a valid chunk");
+        }
+        valid[0] = { ...valid[0], firstChunk: 0 };
+        return valid;
+      },
+    });
+
+    const bookSections: BookSection[] = sections.map((s, index) => ({
+      index,
+      chapter: s.chapter.trim(),
+      title: s.title.trim(),
+      summary: s.summary.trim(),
+    }));
+    // The section of each chunk: the last section starting at or before it.
+    const sectionOfChunk = chunks.map((_, chunkIndex) =>
+      sections.findLastIndex((s) => s.firstChunk <= chunkIndex),
+    );
+    // A chunk is embedded with its heading path in front, so a passage that
+    // never names its topic ("take 4 from both pans") is still found by it.
+    const vectors = await this.embed(
+      chunks.map(
+        (chunk, index) =>
+          `${sectionLabel(bookSections[sectionOfChunk[index]])}\n\n${chunk}`,
+      ),
+      { onCall: options?.onCall },
+    );
+    return {
+      sections: bookSections,
+      chunks: chunks.map((content, index) => ({
+        content,
+        sectionIndex: sectionOfChunk[index],
+        embedding: vectors[index],
+      })),
+    };
+  },
 
   async embed(texts, options) {
     const vectors: number[][] = [];

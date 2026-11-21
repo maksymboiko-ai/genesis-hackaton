@@ -9,4 +9,5 @@ export const DEFAULT_MODELS: Record<GenerationTask, string> = {
   lesson: "google/gemini-3.8-flash",
   replan: "google/gemini-3.8-flash",
   learner_notes: "openai/gpt-6-luna",
+  book_map: "google/gemini-3.8-flash",
 };
