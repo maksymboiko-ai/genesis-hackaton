@@ -35,6 +35,7 @@ describe("lesson minutes", () => {
     // Lesson 1 is written: computed from its content, not the outline's 6.
     const row = memory().data.lessons.find((l) => l.id === lessons[0].id)!;
     expect(lessons[0].estimatedMinutes).toBe(row.estimatedMinutes);
-    expect(lessons[0].estimatedMinutes).toBe(3);
+    // A few words, four blocks and three questions: under a minute + 4 × 0.75 + 3 × 0.75.
+    expect(lessons[0].estimatedMinutes).toBe(6);
   });
 });

@@ -2,8 +2,7 @@ import { Plus, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { Mascot } from '@/components/Mascot'
 import { SubjectIcon } from '@/components/SubjectTile'
-import { SUBJECTS, SUBJECT_KEYS } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { SUBJECTS, gradePopular } from '@/lib/subjects'
 
 const STEPS = [
   { title: 'You describe one goal', text: '“Got a B in algebra, struggles with negative numbers.”' },
@@ -13,12 +12,14 @@ const STEPS = [
 
 export function FirstPlan({
   name,
+  gradeLevel,
   onNewPlan,
   onPickSubject,
 }: {
   name: string
+  gradeLevel: number
   onNewPlan: () => void
-  onPickSubject: (subject: SubjectKey) => void
+  onPickSubject: (subject: string) => void
 }) {
   return (
     <div className="grid gap-6 lg:grid-cols-2 lg:items-stretch lg:gap-10 lg:pt-4">
@@ -35,16 +36,17 @@ export function FirstPlan({
         </div>
 
         <div className="grid grid-cols-3 gap-2.5 md:gap-4">
-          {SUBJECT_KEYS.map((key, at) => (
+          {gradePopular(gradeLevel).map((subject, at) => (
             <button
-              key={key}
+              key={subject.name}
               type="button"
-              onClick={() => onPickSubject(key)}
-              className={`first-tile ${SUBJECTS[key].className}`}
+              onClick={() => onPickSubject(subject.name)}
+              className={`first-tile ${SUBJECTS[subject.family].className}`}
               style={{ animationDelay: `${120 + at * 70}ms` }}
+              title={subject.blurb}
             >
-              <SubjectIcon subject={key} size={30} />
-              <span>{SUBJECTS[key].short}</span>
+              <SubjectIcon subject={subject.family} size={30} />
+              <span className="leading-tight">{subject.name}</span>
             </button>
           ))}
         </div>

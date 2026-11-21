@@ -37,6 +37,7 @@ export async function assertBudget(): Promise<void> {
 
 const TASKS: Record<keyof AiService, LlmCallRecord["task"]> = {
   generateOutline: "outline",
+  extendOutline: "extend",
   generateLesson: "lesson",
   replan: "replan",
   updateLearnerNotes: "learner_notes",
@@ -76,6 +77,7 @@ function wrap<K extends keyof AiService>(name: K): AiService[K] {
 export function getAi(): AiService {
   return {
     generateOutline: wrap("generateOutline"),
+    extendOutline: wrap("extendOutline"),
     generateLesson: wrap("generateLesson"),
     replan: wrap("replan"),
     updateLearnerNotes: wrap("updateLearnerNotes"),

@@ -5,6 +5,7 @@ import { submitAttempt } from "@/lib/server/attempts";
 import { ok, parseJson, parseWith, route } from "@/lib/server/http";
 import { MAX_QUESTIONS } from "@/lib/server/lessons";
 import { LIMITS } from "@/lib/server/rate-limit";
+import { timeZoneOf } from "@/lib/server/streak";
 
 // Replans and learner notes run in after(), inside this function's budget.
 export const maxDuration = 60;
@@ -30,7 +31,7 @@ export const POST = route(
   async (req: Request, ctx: { params: Promise<{ lessonId: string }> }, user) => {
     const { lessonId } = parseWith(Params, await ctx.params);
     const body = await parseJson(req, Body);
-    return ok(SubmitAttemptResponse, await submitAttempt(user, lessonId, body), 201);
+    return ok(SubmitAttemptResponse, await submitAttempt(user, lessonId, body, timeZoneOf(req)), 201);
   },
   { limit: LIMITS.attempt },
 );

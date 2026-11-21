@@ -1,9 +1,9 @@
-import type { SubjectKey } from './subjects'
+import type { LessonBlock } from '@/contracts/domain'
 
 type MockQuestion = { prompt: string; choices: [string, string, string, string]; correct: number; why: string }
 
 export type MockLesson = {
-  subject: SubjectKey
+  subject: 'math' | 'read' | 'sci'
   skill: string
   hook: string
   rule: string
@@ -14,6 +14,8 @@ export type MockLesson = {
   passage?: string[]
   slip: string
   recap: string
+  // Extra blocks placed after the points: a figure, a quick check.
+  blocks?: LessonBlock[]
   questions: MockQuestion[]
 }
 
@@ -21,6 +23,34 @@ export const MOCK_LESSONS: MockLesson[] = [
   {
     subject: 'math',
     skill: 'reading-equations',
+    blocks: [
+      {
+        type: 'number_line',
+        id: 'line-1',
+        title: 'x + 3 = 10 on a number line',
+        caption: 'Start at the hidden number, jump 3 to the right, and you land on 10.',
+        min: 0,
+        max: 12,
+        step: 1,
+        points: [
+          { value: 7, label: 'x', open: true },
+          { value: 10, label: '10', open: false },
+        ],
+        ranges: [{ from: 7, to: 10 }],
+      },
+      {
+        type: 'check',
+        id: 'check-1',
+        prompt: 'Which number makes x + 5 = 9 true?',
+        choices: ['x = 14', 'x = 4', 'x = 5'],
+        answerIndex: 1,
+        feedback: [
+          '14 comes from adding 5 to 9. But 14 + 5 is 19, so the two sides would not match.',
+          '4 + 5 is 9, so both sides are worth the same.',
+          '5 + 5 is 10, one too many. Look for the number that is 5 less than 9.',
+        ],
+      },
+    ],
     hook: 'An equation is a sentence that says two things are worth the same. The equals sign is not a signal to "write the answer". It is the middle of a balance.',
     rule: 'Whatever is on the left weighs exactly as much as what is on the right. Keep it that way and the equation stays true.',
     pointsTitle: 'How to read one',
@@ -131,6 +161,36 @@ export const MOCK_LESSONS: MockLesson[] = [
   {
     subject: 'math',
     skill: 'two-step-equations',
+    blocks: [
+      {
+        type: 'graph',
+        id: 'graph-1',
+        title: 'Where does 3x + 4 reach −11?',
+        caption: 'Slide x until the point sits on the dashed line. That x solves the equation.',
+        xMin: -8,
+        xMax: 4,
+        yMin: -18,
+        yMax: 18,
+        parameters: [{ name: 't', label: 'x', min: -7, max: 3, step: 0.5, value: 1 }],
+        elements: [
+          { kind: 'function', expr: '3x + 4', dashed: false, label: 'y = 3x + 4', tone: 'primary' },
+          { kind: 'function', expr: '-11', dashed: true, label: 'y = −11', tone: 'secondary' },
+          { kind: 'point', x: 't', y: '3t + 4', label: '', tone: 'primary' },
+        ],
+        readouts: [{ label: '3x + 4', expr: '3t + 4' }],
+      },
+      {
+        type: 'check',
+        id: 'check-1',
+        prompt: 'In 5x − 2 = 13, what do you undo first?',
+        choices: ['The −2: add 2 to both sides', 'The 5: divide both sides by 5'],
+        answerIndex: 0,
+        feedback: [
+          'Right. The subtraction was done last, so it is undone first.',
+          'Dividing first means the 2 has to be divided as well. Clear the −2 first and that never comes up.',
+        ],
+      },
+    ],
     hook: 'A two-step equation has two things done to x: usually a multiplication and then an addition or subtraction. You undo them in reverse order, like taking off shoes before socks.',
     rule: 'Undo the adding or subtracting first. Undo the multiplying or dividing second.',
     pointsTitle: 'Spot the two steps',

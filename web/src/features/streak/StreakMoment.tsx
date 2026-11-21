@@ -3,8 +3,7 @@
 import { useCallback, useState } from 'react'
 import { Button } from '@/components/Button'
 import { Mascot } from '@/components/Mascot'
-import type { Curriculum } from '@/contracts/domain'
-import { loadPlans } from '@/features/product/data'
+import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 import { seenToday, streakOf } from '@/lib/streak'
 import { useResource } from '@/lib/useResource'
@@ -12,14 +11,14 @@ import { StreakWeek } from './StreakWeek'
 
 export function StreakMoment() {
   const { childId } = useSession()
-  const load = useCallback(() => loadPlans(childId!), [childId])
+  const load = useCallback(() => api.getStreak(childId!), [childId])
   const { data } = useResource(childId ? load : null)
 
-  return data ? <Moment plans={data} childId={childId} /> : null
+  return data ? <Moment days={data.days} childId={childId} /> : null
 }
 
-function Moment({ plans, childId }: { plans: Curriculum[]; childId: string | null }) {
-  const streak = streakOf(plans)
+function Moment({ days, childId }: { days: string[]; childId: string | null }) {
+  const streak = streakOf(days)
   const [open, setOpen] = useState(() => streak.doneToday && !seenToday('plus-one', childId))
 
   if (!open) return null

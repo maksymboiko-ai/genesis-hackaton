@@ -6,10 +6,12 @@ import {
   CreateBookUploadResponse,
   CreateChildResponse,
   CreateCurriculumResponse,
+  ExtendCurriculumResponse,
   GetBookResponse,
   GetCurriculumResponse,
   GetLessonResponse,
   GetProfileResponse,
+  GetStreakResponse,
   ListBooksResponse,
   ListChildrenResponse,
   ListCurriculaResponse,
@@ -67,9 +69,19 @@ async function request<S extends z.ZodType>(
 
 const post = (body: unknown): RequestInit => ({
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 'Content-Type': 'application/json', 'X-Timezone': timeZone() },
   body: JSON.stringify(body),
 })
+
+// The browser's time zone: the server counts streak days in the child's own
+// calendar, not in UTC.
+function timeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
 
 export const api = {
   // Accounts. The session lives in httpOnly cookies the server sets.
@@ -81,6 +93,7 @@ export const api = {
   listChildren: () => request(ListChildrenResponse, '/children'),
   createChild: (body: CreateChildRequest) => request(CreateChildResponse, '/children', post(body)),
   getProfile: (childId: string) => request(GetProfileResponse, `/children/${childId}/profile`),
+  getStreak: (childId: string) => request(GetStreakResponse, `/children/${childId}/streak`),
 
   listBooks: () => request(ListBooksResponse, '/books'),
   getBook: (bookId: string) => request(GetBookResponse, `/books/${bookId}`),
@@ -105,6 +118,9 @@ export const api = {
     request(CreateCurriculumResponse, '/curricula', post(body)),
   getCurriculum: (curriculumId: string) =>
     request(GetCurriculumResponse, `/curricula/${curriculumId}`),
+  // "Keep going" on a finished plan: plans and appends the next lessons.
+  extendCurriculum: (curriculumId: string) =>
+    request(ExtendCurriculumResponse, `/curricula/${curriculumId}/extend`, { method: 'POST' }),
 
   getLesson: (lessonId: string) => request(GetLessonResponse, `/lessons/${lessonId}`),
   // "Try again" on a failed lesson.

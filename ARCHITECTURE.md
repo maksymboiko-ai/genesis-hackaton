@@ -103,7 +103,7 @@ A lesson has a `kind`:
 
 | Kind | Meaning |
 |---|---|
-| `core` | Part of the original outline |
+| `core` | Part of the plan: the original outline, or lessons added by "Keep going" |
 | `remedial` | Inserted to teach a skill the child is missing |
 | `retry` | A failed lesson scheduled again, with fresh content |
 | `extension` | Appended because the child is excelling |
@@ -116,9 +116,16 @@ The current lesson is the one with the lowest `position` that has no `completed_
 
 1. Frontend sends `POST /api/curricula` with the child, the prompt and an optional book.
 2. Backend builds the `LearnerProfile` from `child.notes` and `skill_mastery`. If there is a book, it loads the book's section map (`book.sections`).
-3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies. With a book, each lesson also names the section it is taught from, stored in `lesson.book_section_index`.
+3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies. The plan is as long as the goal needs: 4 to 6 lessons for one narrow skill, 8 to 14 for a school unit, up to `MAX_OUTLINE_LESSONS` (30) for a whole subject. With a book, each lesson also names the section it is taught from, stored in `lesson.book_section_index`.
    - If the prompt is too vague to plan ("help with math"), `generateOutline` returns up to 3 clarifying questions instead. Backend stores nothing and responds with `status: 'needs_clarification'`. Frontend shows the questions and sends the same request again with the answers in `clarifications`; with answers present the result is always an outline, so there is one round at most.
 4. Backend stores the curriculum and its lessons with `content_status = 'pending'`, responds, and starts generating the first lesson in the background.
+
+### Keep going on a finished plan
+
+1. When every lesson is done, the plan page and the last results screen offer "Keep going". Frontend sends `POST /api/curricula/:id/extend`.
+2. Backend takes the replan claim (`replan_status = 'running'`), so a second press or a running replan answers `conflict`, and refuses while a lesson is unfinished or the plan already holds `MAX_CURRICULUM_LESSONS`.
+3. Backend calls `extendOutline` with the goal, every lesson of the plan with its latest score, the `LearnerProfile` and, with a book, the section map. The model returns the next lessons: a return to a skill that is still shaky, then what naturally follows; with a book, its untaught sections in order.
+4. Backend appends up to `MAX_EXTEND_LESSONS` of them as `core` lessons, releases the claim, starts generating the first and responds with the curriculum. No `replan_event` is written.
 
 ### Open a lesson
 
@@ -126,6 +133,21 @@ The current lesson is the one with the lowest `position` that has no `completed_
 2. If the content is `pending`, the backend marks it `generating`, fetches the lesson's book chunks (see [Textbook grounding](#textbook-grounding-rag)), calls `generateLesson` and stores the result.
 3. When a lesson becomes ready, the backend starts generating the next one, so the child rarely waits.
 4. Responses never include `correctIndex` or `explanation`.
+
+### Lesson content and interactive blocks
+
+A lesson is `bodyMarkdown`, a list of `blocks` and the quiz `questions` (`LessonContent` in `contracts/domain.ts`). The body is a full lesson (about 350 to 1,200 words, by grade) and a block sits where the body has a line holding only its id, `[[graph-1]]`.
+
+| Block | What the child does |
+|---|---|
+| `graph` | A coordinate plane with points, segments, lines, vectors, circles, polygons and function curves. `parameters` are sliders; every position is an expression over them (`"2*m + b"`), so the figure redraws as a slider moves. A point whose coordinates are two parameter names can be dragged. `readouts` show live values. |
+| `number_line` | Points (closed or open) and shaded ranges on a line. |
+| `check` | A quick question between two ideas, answered in place with feedback per choice. Not graded, not stored; its answer is sent to the browser. |
+| `steps` | A worked example opened one step at a time. |
+
+- **The model writes data, our components draw it.** No model-written HTML or SVG reaches the page (ADR 0002). Expressions are parsed by `lib/expr.ts`, never evaluated as code.
+- **Three layers check a block.** The AI module converts the model's flat output to `LessonBlock`s and sends a broken block back once with the reason; if it is still broken, the lesson is kept without it. The backend bounds the text and drops any block that fails `lib/lesson-blocks.ts`, together with its placeholder. The frontend shows nothing for a placeholder with no block.
+- Lessons stored before blocks existed have no `blocks` field; it reads as `[]`.
 
 ### Submit a quiz
 
@@ -182,7 +204,7 @@ Parents sign up and sign in through `/api/auth/*`; the backend calls Supabase Au
 ## Models and evals
 
 - All model calls go through one OpenRouter client in `lib/ai/`.
-- `lib/ai/models.ts` maps each task (`outline`, `lesson`, `replan`, `learner_notes`, `book_map`) to a default model. Every `AiService` function accepts a `model` override.
+- `lib/ai/models.ts` maps each task (`outline`, `extend`, `lesson`, `replan`, `learner_notes`, `book_map`, `feedback`) to a default model. Every `AiService` function accepts a `model` override.
 - Structured output uses `response_format` with `type: "json_schema"` and `strict: true`, generated from the Zod schemas in `web/src/contracts/ai.ts`. Requests set `provider.require_parameters: true` so OpenRouter only routes to endpoints that support it.
 - Enforcement differs between providers, so every response is still parsed with Zod. On failure the function retries once, then throws.
 - Model-facing schemas stay plain (no optional fields, no length or range limits) so they work across providers. Counts and ranges are checked in code.

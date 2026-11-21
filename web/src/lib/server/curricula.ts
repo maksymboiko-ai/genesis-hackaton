@@ -1,10 +1,14 @@
 import "server-only";
 import { z } from "zod";
-import type { OutlineOutput } from "@/contracts/ai";
+import type { OutlineLesson, OutlineOutput } from "@/contracts/ai";
 import type { CreateCurriculumRequest, CreateCurriculumResponse } from "@/contracts/api";
+import { findGradeSubject, gradeSubjectFor, subjectsForGrade } from "@/contracts/subjects";
 import {
   BookSection,
   MAX_CLARIFYING_QUESTIONS,
+  MAX_CURRICULUM_LESSONS,
+  MAX_EXTEND_LESSONS,
+  MAX_OUTLINE_LESSONS,
   type Clarification,
   type Curriculum,
 } from "@/contracts/domain";
@@ -13,7 +17,7 @@ import { getAi } from "./ai";
 import type { AuthUser } from "./auth";
 import { buildLearnerProfile, knownSkillsOf } from "./children";
 import { badRequest, conflict, notFound, upstream } from "./errors";
-import { startLessonGeneration } from "./lessons";
+import { startLessonGeneration, STALE_JOB_MS } from "./lessons";
 import { toCurriculum, toCurriculumListItem } from "./mappers";
 import { getStore } from "./store";
 import type { NewLesson } from "./store/types";
@@ -21,7 +25,7 @@ import { cleanText, toSkillSlug } from "./text";
 import { cleanMinutes, fallbackMinutes } from "./timing";
 
 // Limits on what the model may produce for one curriculum (backend-security §3).
-export const MAX_OUTLINE_LESSONS = 12;
+export { MAX_OUTLINE_LESSONS };
 export const MAX_SKILLS_PER_LESSON = 5;
 const MAX_QUESTION_CHARS = 300;
 const MAX_ANSWER_CHARS = 500;
@@ -29,22 +33,17 @@ const MAX_ANSWER_CHARS = 500;
 export type ValidOutline = { subject: string; title: string; lessons: NewLesson[] };
 
 /**
- * Checks and bounds a model outline. Bad skill slugs are normalized or
- * dropped, section indexes outside the book map become null, extra lessons are
- * cut. Throws if nothing usable is left.
+ * Checks and bounds the lessons of a model outline. Bad skill slugs are
+ * normalized or dropped, section indexes outside the book map become null,
+ * lessons past `max` are cut.
  */
-export function validateOutline(
-  outline: OutlineOutput,
-  sections: BookSection[],
-  fallbackTitle: string,
-  gradeLevel: number,
-): ValidOutline {
+function validateLessons(planned: OutlineLesson[], sections: BookSection[], gradeLevel: number, max: number): NewLesson[] {
   const sectionIndexes = new Set(sections.map((s) => s.index));
-  const estimates = outline.lessons.map((l) => l.estimatedMinutes);
+  const estimates = planned.map((l) => l.estimatedMinutes);
   const fallback = fallbackMinutes(estimates, gradeLevel);
   const lessons: NewLesson[] = [];
-  for (const lesson of outline.lessons) {
-    if (lessons.length >= MAX_OUTLINE_LESSONS) break;
+  for (const lesson of planned) {
+    if (lessons.length >= max) break;
     const title = cleanText(lesson.title, 150);
     const objective = cleanText(lesson.objective, 500);
     if (!title || !objective) continue;
@@ -65,6 +64,17 @@ export function validateOutline(
       bookSectionIndex: index !== null && Number.isInteger(index) && sectionIndexes.has(index) ? index : null,
     });
   }
+  return lessons;
+}
+
+/** Checks and bounds a model outline. Throws if nothing usable is left. */
+export function validateOutline(
+  outline: OutlineOutput,
+  sections: BookSection[],
+  fallbackTitle: string,
+  gradeLevel: number,
+): ValidOutline {
+  const lessons = validateLessons(outline.lessons, sections, gradeLevel, MAX_OUTLINE_LESSONS);
   if (lessons.length === 0) throw upstream("The AI returned an empty plan. Try again.");
   return {
     subject: cleanText(outline.subject, 80) || "General",
@@ -94,7 +104,9 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
   if (!prompt) throw badRequest("Invalid fields: prompt.");
   const clarifications = cleanClarifications(body.clarifications);
 
-  await ownedChild(user, body.childId);
+  const child = await ownedChild(user, body.childId);
+  const picked = body.subject ? findGradeSubject(child.gradeLevel, body.subject) : null;
+  if (body.subject && !picked) throw badRequest(`Invalid fields: subject is not a grade ${child.gradeLevel} subject.`);
   const bookSections = await bookSectionsFor(user, body.bookId);
   const learner = await buildLearnerProfile(body.childId);
 
@@ -104,6 +116,8 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
     learner,
     knownSkills: knownSkillsOf(learner),
     bookSections,
+    subjects: subjectsForGrade(child.gradeLevel).map((subject) => subject.name),
+    subject: picked?.name ?? null,
   });
 
   if (result.kind === "questions") {
@@ -124,13 +138,78 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
     childId: body.childId,
     bookId: body.bookId,
     prompt,
-    subject: outline.subject,
+    // The model may drift from the list: map it back onto the grade.
+    subject: picked?.name ?? gradeSubjectFor(child.gradeLevel, outline.subject).name,
     title: outline.title,
     lessons: outline.lessons,
   });
   const [first] = await store.listLessons(id);
   if (first) await startLessonGeneration(first.id);
   return { status: "created", curriculum: await getCurriculum(id) };
+}
+
+/** The map of a plan's book, or [] when the book is gone or not ready. */
+async function bookSectionsIfReady(user: AuthUser, bookId: string | null): Promise<BookSection[]> {
+  if (!bookId) return [];
+  const book = await getStore().getBook(bookId);
+  if (!book || book.ownerId !== user.id || book.status !== "ready") return [];
+  const sections = z.array(BookSection).safeParse(book.sections);
+  return sections.success ? sections.data : [];
+}
+
+/**
+ * POST /curricula/:id/extend. The child finished the plan and wants more:
+ * plans the next lessons from the plan so far and appends them. The replan
+ * claim serializes this with replans and with a second press of the button.
+ */
+export async function extendCurriculum(user: AuthUser, id: string): Promise<Curriculum> {
+  const { curriculum } = await ownedCurriculum(user, id);
+  const store = getStore();
+  const staleBefore = new Date(Date.now() - STALE_JOB_MS).toISOString();
+  if (!(await store.claimReplan(id, staleBefore))) throw conflict("The plan is being updated. Try again in a moment.");
+  try {
+    const lessons = await store.listLessons(id);
+    if (lessons.some((l) => !l.completedAt)) throw conflict("Finish the lessons in the plan first.");
+    const room = MAX_CURRICULUM_LESSONS - lessons.length;
+    if (room <= 0) throw conflict("This plan is as long as a plan can be. Start a new one to keep going.");
+    const maxLessons = Math.min(MAX_EXTEND_LESSONS, room);
+
+    const [learner, bookSections] = await Promise.all([
+      buildLearnerProfile(curriculum.childId),
+      bookSectionsIfReady(user, curriculum.bookId),
+    ]);
+    const result = await getAi().extendOutline({
+      prompt: curriculum.prompt,
+      subject: curriculum.subject,
+      title: curriculum.title,
+      lessons: lessons.map((l) => ({
+        title: l.title,
+        objective: l.objective,
+        skills: l.skills,
+        kind: l.kind,
+        score: l.lastScore,
+        bookSectionIndex: l.bookSectionIndex,
+      })),
+      learner,
+      knownSkills: knownSkillsOf(learner),
+      bookSections,
+      maxLessons,
+    });
+
+    // The model is told not to repeat a lesson; a repeat that slips through is dropped.
+    const taken = new Set(lessons.map((l) => l.title.trim().toLowerCase()));
+    const added = validateLessons(result.lessons, bookSections, learner.gradeLevel, maxLessons).filter(
+      (l) => !taken.has(l.title.toLowerCase()),
+    );
+    if (added.length === 0) throw upstream("The AI could not plan more lessons. Try again.");
+    const [first] = await store.appendLessons(id, added);
+    await store.releaseReplan(id);
+    if (first) await startLessonGeneration(first);
+  } catch (err) {
+    await store.releaseReplan(id).catch(() => {});
+    throw err;
+  }
+  return getCurriculum(id);
 }
 
 export async function listCurricula(user: AuthUser, childId: string) {

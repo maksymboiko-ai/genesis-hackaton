@@ -6,6 +6,7 @@ import {
   BookMapOutput,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
+  ExtendDraft,
   LearnerNotesOutput,
   LessonOutput,
   OutlineDraft,
@@ -19,18 +20,25 @@ import {
   MAX_CLARIFYING_QUESTIONS,
   type BookSection,
 } from "@/contracts/domain";
+import { lessonWords } from "@/lib/lesson-blocks";
+import { buildBlocks } from "./blocks";
 import { chunkText } from "./chunk";
 import { callEmbeddings, callStructured, InvalidOutputError } from "./client";
 import { DEFAULT_MODELS } from "./models";
 import {
   attemptFeedbackPrompt,
   bookMapPrompt,
+  extendPrompt,
   learnerNotesPrompt,
   lessonPrompt,
+  lessonSize,
   outlinePrompt,
   replanPrompt,
   sectionLabel,
 } from "./prompts";
+
+// A lesson under this share of the smallest length asked for is sent back.
+const SHORT_LESSON = 0.8;
 
 // OpenRouter's embeddings endpoint takes a batch; keep requests modest.
 const EMBED_BATCH_SIZE = 64;
@@ -50,13 +58,19 @@ function nonEmpty(text: string, what: string): string {
   return trimmed;
 }
 
-// Minutes the model gives a lesson, rounded and kept within 3 to 30; a near
+// Minutes the model gives a lesson, rounded and kept within 3 to 45; a near
 // miss is not worth a retry.
 function minutes(value: number, what: string): number {
   if (!Number.isFinite(value)) {
     throw new InvalidOutputError(`${what} estimatedMinutes must be a number`);
   }
-  return Math.min(30, Math.max(3, Math.round(value)));
+  return Math.min(45, Math.max(3, Math.round(value)));
+}
+
+// -1, or anything else that is not a section of this book, means the lesson
+// has no section.
+function sectionIndex(value: number, sections: BookSection[]): number | null {
+  return sections.some((s) => s.index === value) ? value : null;
 }
 
 function checkLessonOutlines<T extends LessonOutline>(lessons: T[]): T[] {
@@ -98,18 +112,12 @@ export const aiService: AiService = {
         return {
           kind: "outline",
           outline: {
-            subject: nonEmpty(draft.subject, "subject").toLowerCase(),
+            subject: nonEmpty(draft.subject, "subject"),
             title: nonEmpty(draft.title, "title"),
             lessons: checkLessonOutlines(draft.lessons).map((lesson, index) => ({
               ...lesson,
               estimatedMinutes: minutes(lesson.estimatedMinutes, `lesson ${index + 1}`),
-              // -1, or anything else that is not a section of this book,
-              // means the lesson has no section.
-              bookSectionIndex: input.bookSections.some(
-                (s) => s.index === lesson.bookSectionIndex,
-              )
-                ? lesson.bookSectionIndex
-                : null,
+              bookSectionIndex: sectionIndex(lesson.bookSectionIndex, input.bookSections),
             })),
           },
         };
@@ -117,8 +125,41 @@ export const aiService: AiService = {
     });
   },
 
+  extendOutline(input, options) {
+    const prompt = extendPrompt(input);
+    const taken = new Set(input.lessons.map((lesson) => lesson.title.trim().toLowerCase()));
+    return callStructured({
+      task: "extend",
+      model: options?.model ?? DEFAULT_MODELS.extend,
+      ...prompt,
+      schemaName: "extend",
+      schema: ExtendDraft,
+      onCall: options?.onCall,
+      check: (draft) => {
+        // A lesson the plan already has is dropped, not sent back for a retry.
+        const fresh = draft.lessons.filter((lesson) => !taken.has(lesson.title.trim().toLowerCase()));
+        if (!fresh.length) throw new InvalidOutputError("every lesson repeats one the plan already has");
+        return {
+          lessons: checkLessonOutlines(fresh)
+            .slice(0, input.maxLessons)
+            .map((lesson, index) => ({
+              ...lesson,
+              estimatedMinutes: minutes(lesson.estimatedMinutes, `lesson ${index + 1}`),
+              bookSectionIndex: sectionIndex(lesson.bookSectionIndex, input.bookSections),
+            })),
+        };
+      },
+    });
+  },
+
   generateLesson(input, options) {
     const prompt = lessonPrompt(input);
+    const size = lessonSize(input.learner.gradeLevel);
+    // A broken block, or a lesson much shorter or barer than asked for, is
+    // sent back once with what is wrong. The second answer is taken as it
+    // is, without any block that is still broken: a lesson missing a figure
+    // is better than no lesson.
+    let answers = 0;
     return callStructured({
       task: "lesson",
       model: options?.model ?? DEFAULT_MODELS.lesson,
@@ -127,6 +168,21 @@ export const aiService: AiService = {
       schema: LessonOutput,
       onCall: options?.onCall,
       check: (output) => {
+        const built = buildBlocks(output);
+        const first = ++answers === 1;
+        const total = lessonWords(built.bodyMarkdown, built.blocks);
+        const count = (type: string) => built.blocks.filter((block) => block.type === type).length;
+        const problems = [
+          ...built.problems,
+          ...(total < size.minWords * SHORT_LESSON
+            ? [`the lesson is only ${total} words long; write the complete lesson, at least ${size.minWords} words, with every idea explained step by step and two worked examples`]
+            : []),
+          ...(count("check") < 2 ? [`the lesson has ${count("check")} checks; it needs 2 or 3, each placed in the body`] : []),
+          ...(count("steps") < 1 ? ["the lesson needs a stepped example, placed in the body"] : []),
+        ];
+        if (problems.length && first) {
+          throw new InvalidOutputError(problems.slice(0, 6).join("; "));
+        }
         const questions = output.questions.map((question, index) => {
           const label = `question ${index + 1}`;
           if (question.choices.length !== CHOICES_PER_QUESTION) {
@@ -172,7 +228,8 @@ export const aiService: AiService = {
           };
         });
         const content = LessonContent.safeParse({
-          bodyMarkdown: nonEmpty(output.bodyMarkdown, "bodyMarkdown"),
+          bodyMarkdown: nonEmpty(built.bodyMarkdown, "bodyMarkdown"),
+          blocks: built.blocks,
           questions,
         });
         if (!content.success) {

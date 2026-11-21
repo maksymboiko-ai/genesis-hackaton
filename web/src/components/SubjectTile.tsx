@@ -1,10 +1,15 @@
-import { BookOpen, FlaskConical } from 'lucide-react'
+import { BookOpen, CodeXml, Dumbbell, FlaskConical, Globe, Languages, Palette } from 'lucide-react'
 import { SUBJECTS } from '@/lib/subjects'
 import type { SubjectKey } from '@/lib/subjects'
 
 export function SubjectIcon({ subject, size = 24 }: { subject: SubjectKey; size?: number }) {
   if (subject === 'read') return <BookOpen size={size} strokeWidth={2.2} aria-hidden="true" />
   if (subject === 'sci') return <FlaskConical size={size} strokeWidth={2.2} aria-hidden="true" />
+  if (subject === 'social') return <Globe size={size} strokeWidth={2.2} aria-hidden="true" />
+  if (subject === 'arts') return <Palette size={size} strokeWidth={2.2} aria-hidden="true" />
+  if (subject === 'move') return <Dumbbell size={size} strokeWidth={2.2} aria-hidden="true" />
+  if (subject === 'lang') return <Languages size={size} strokeWidth={2.2} aria-hidden="true" />
+  if (subject === 'tech') return <CodeXml size={size} strokeWidth={2.2} aria-hidden="true" />
   return (
     <svg
       width={size}

@@ -1,6 +1,15 @@
 import "server-only";
 import type { GetLessonResponse } from "@/contracts/api";
-import { CHOICES_PER_QUESTION, LessonContent, SkillSlug, type Question } from "@/contracts/domain";
+import {
+  CHOICES_PER_QUESTION,
+  LessonBlock,
+  LessonContent,
+  type LessonContentInput,
+  MAX_LESSON_BLOCKS,
+  SkillSlug,
+  type Question,
+} from "@/contracts/domain";
+import { blockProblem, placeBlocks } from "@/lib/lesson-blocks";
 import { ownedLesson } from "./access";
 import { getAi } from "./ai";
 import type { AuthUser } from "./auth";
@@ -36,11 +45,56 @@ export function readContent(row: LessonRow): LessonContent | null {
   return parsed.success ? parsed.data : null;
 }
 
+const label = (text: string) => cleanText(text, 80);
+
+/** Caps the text of a block; null if it no longer passes its schema or rules. */
+function cleanBlock(block: LessonBlock): LessonBlock | null {
+  let cleaned: LessonBlock;
+  switch (block.type) {
+    case "graph":
+      cleaned = {
+        ...block,
+        title: cleanText(block.title, 150),
+        caption: cleanText(block.caption, 300),
+        parameters: block.parameters.map((p) => ({ ...p, label: label(p.label) })),
+        elements: block.elements.map((e) => ({ ...e, label: label(e.label) })),
+        readouts: block.readouts.map((r) => ({ ...r, label: label(r.label) })),
+      };
+      break;
+    case "number_line":
+      cleaned = {
+        ...block,
+        title: cleanText(block.title, 150),
+        caption: cleanText(block.caption, 300),
+        points: block.points.map((p) => ({ ...p, label: label(p.label) })),
+      };
+      break;
+    case "check":
+      cleaned = {
+        ...block,
+        prompt: cleanText(block.prompt, 1000),
+        choices: block.choices.map((c) => cleanText(c, 300)),
+        feedback: block.feedback.map((f) => cleanText(f, 600)),
+      };
+      break;
+    case "steps":
+      cleaned = {
+        ...block,
+        title: cleanText(block.title, 300),
+        steps: block.steps.map((s) => ({ text: sanitizeMarkdown(s.text, 600), math: cleanText(s.math, 200) })),
+      };
+      break;
+  }
+  const parsed = LessonBlock.safeParse(cleaned);
+  return parsed.success && !blockProblem(parsed.data) ? parsed.data : null;
+}
+
 /**
  * Bounds and cleans model-written lesson content (model output is untrusted).
+ * A block that cannot be shown is dropped together with its placeholder.
  * Throws if no valid question is left.
  */
-export function checkLessonContent(content: LessonContent): LessonContent {
+export function checkLessonContent(content: LessonContentInput): LessonContent {
   const seen = new Set<string>();
   const questions: Question[] = [];
   for (const q of content.questions) {
@@ -60,7 +114,13 @@ export function checkLessonContent(content: LessonContent): LessonContent {
     questions.push({ id, prompt, choices, correctIndex: q.correctIndex, explanation, choiceFeedback, skill: q.skill });
   }
   if (questions.length === 0) throw new Error("lesson content has no valid questions");
-  return LessonContent.parse({ bodyMarkdown: sanitizeMarkdown(content.bodyMarkdown, MAX_BODY_CHARS), questions });
+  const seenBlocks = new Set<string>();
+  const blocks = (content.blocks ?? [])
+    .map(cleanBlock)
+    .filter((b): b is LessonBlock => b !== null && !seenBlocks.has(b.id) && Boolean(seenBlocks.add(b.id)))
+    .slice(0, MAX_LESSON_BLOCKS);
+  const placed = placeBlocks(sanitizeMarkdown(content.bodyMarkdown, MAX_BODY_CHARS), blocks);
+  return LessonContent.parse({ bodyMarkdown: placed.bodyMarkdown, blocks: placed.blocks, questions });
 }
 
 /** Generates and stores one claimed lesson. On any error the lesson is marked failed. */
@@ -160,6 +220,7 @@ function toLessonResponse(row: LessonRow): GetLessonResponse {
     contentStatus: row.contentStatus === "ready" && !content ? "failed" : row.contentStatus,
     content: content && {
       bodyMarkdown: content.bodyMarkdown,
+      blocks: content.blocks,
       questions: content.questions.map(({ id, prompt, choices, skill }) => ({ id, prompt, choices, skill })),
     },
   };

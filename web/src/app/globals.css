@@ -24,6 +24,21 @@
   --sci: #15924f;
   --sci-tint: #e3f6ea;
   --sci-ink: #0f6a39;
+  --social: #c2700c;
+  --social-tint: #fff1dc;
+  --social-ink: #874c05;
+  --arts: #7c4ddb;
+  --arts-tint: #f3eeff;
+  --arts-ink: #4b2aa6;
+  --move: #0e8a9a;
+  --move-tint: #e0f5f7;
+  --move-ink: #086470;
+  --lang: #d0367a;
+  --lang-tint: #fde8f1;
+  --lang-ink: #96204f;
+  --tech: #475569;
+  --tech-tint: #edf0f4;
+  --tech-ink: #2b3544;
 
   --sun: #ffc83d;
   --sun-tint: #fff6db;
@@ -140,8 +155,36 @@ body {
   --s-tint: var(--sci-tint);
   --s-ink: var(--sci-ink);
 }
+.s-social {
+  --s: var(--social);
+  --s-tint: var(--social-tint);
+  --s-ink: var(--social-ink);
+}
+.s-arts {
+  --s: var(--arts);
+  --s-tint: var(--arts-tint);
+  --s-ink: var(--arts-ink);
+}
+.s-move {
+  --s: var(--move);
+  --s-tint: var(--move-tint);
+  --s-ink: var(--move-ink);
+}
+.s-lang {
+  --s: var(--lang);
+  --s-tint: var(--lang-tint);
+  --s-ink: var(--lang-ink);
+}
+.s-tech {
+  --s: var(--tech);
+  --s-tint: var(--tech-tint);
+  --s-ink: var(--tech-ink);
+}
 
 .wm {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font: 800 22px/1 var(--font);
   letter-spacing: -0.03em;
   color: var(--text);

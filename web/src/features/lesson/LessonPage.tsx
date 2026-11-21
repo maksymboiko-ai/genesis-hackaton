@@ -9,9 +9,9 @@ import { Button } from '@/components/Button'
 import { KindTag } from '@/components/KindTag'
 import { SubjectTile } from '@/components/SubjectTile'
 import type { GetLessonResponse, SubmitAttemptResponse } from '@/contracts/api'
-import type { Curriculum } from '@/contracts/domain'
+import type { Curriculum, LessonBlock } from '@/contracts/domain'
 import { api } from '@/lib/api'
-import { SUBJECTS, subjectKey } from '@/lib/subjects'
+import { SUBJECTS, subjectKey, subjectLabel } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import { LessonBody } from './LessonBody'
 import { Quiz } from './Quiz'
@@ -19,8 +19,8 @@ import { Results } from './Results'
 import { extractPassage, splitLabel, splitSections } from './text'
 import './lesson.css'
 
-const STAGES = ['Matching your level', 'Building a worked example', 'Writing the questions']
-const STAGE_MS = 1300
+const STAGES = ['Matching your level', 'Building the worked examples', 'Drawing the figures', 'Writing the questions']
+const STAGE_MS = 2600
 
 const isPreparing = (lesson: GetLessonResponse) =>
   lesson.contentStatus === 'pending' || lesson.contentStatus === 'generating'
@@ -64,6 +64,7 @@ function Lesson({ lessonId }: { lessonId: string }) {
   const sections = useMemo(() => splitSections(markdown, lesson?.title ?? ''), [markdown, lesson?.title])
   const passage = useMemo(() => (subject === 'read' ? extractPassage(markdown) : []), [markdown, subject])
   const questions = lesson?.content?.questions ?? []
+  const blocks = lesson?.content?.blocks ?? []
 
   async function submit() {
     if (!lesson) return
@@ -141,6 +142,7 @@ function Lesson({ lessonId }: { lessonId: string }) {
           planHref={planHref}
           subject={subject}
           sections={sections}
+          blocks={blocks}
           onStart={startQuiz}
           onRetry={retryLesson}
         />
@@ -213,6 +215,7 @@ type ReadingProps = {
   planHref: string
   subject: ReturnType<typeof subjectKey>
   sections: ReturnType<typeof splitSections>
+  blocks: LessonBlock[]
   onStart: () => void
   onRetry: () => void
 }
@@ -224,6 +227,7 @@ function Reading({
   planHref,
   subject,
   sections,
+  blocks,
   onStart,
   onRetry,
 }: ReadingProps) {
@@ -289,8 +293,8 @@ function Reading({
         </div>
       </div>
 
-      <div className="pt-6 lg:grid lg:grid-cols-[200px_minmax(0,680px)] lg:justify-center lg:gap-12 lg:pt-10">
-        <nav aria-label="In this lesson" className="toc hidden pt-40 lg:block">
+      <div className="pt-6 lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-14 lg:pt-10">
+        <nav aria-label="In this lesson" className="toc hidden pt-0.5 lg:block">
           {ready && outline.length > 0 && (
             <div className="sticky top-40 flex flex-col gap-0.5">
               <p className="sm mb-2 font-bold!">In this lesson</p>
@@ -309,7 +313,7 @@ function Reading({
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="subj">
                 <SubjectTile subject={subject} size={26} />
-                {SUBJECTS[subject].label}
+                {curriculum ? subjectLabel(curriculum.subject) : SUBJECTS[subject].label}
               </span>
               {lesson.kind !== 'core' && <KindTag kind={lesson.kind} />}
               {done && score !== null && (
@@ -349,7 +353,7 @@ function Reading({
           {ready && (
             <>
               <div className="a-fade pt-4">
-                <LessonBody sections={sections} subject={subject} />
+                <LessonBody sections={sections} blocks={blocks} subject={subject} />
               </div>
               <div id="lesson-quiz" className="lesson-foot md:mt-10 md:scroll-mt-40">
                 <Button block onClick={onStart}>

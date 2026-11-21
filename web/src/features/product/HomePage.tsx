@@ -12,8 +12,7 @@ import { SubjectIcon, SubjectTile } from '@/components/SubjectTile'
 import type { Child, Curriculum } from '@/contracts/domain'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
-import { SUBJECTS, SUBJECT_KEYS, subjectClass, subjectKey, subjectLabel } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { SUBJECTS, gradePopular, subjectClass, subjectKey, subjectLabel } from '@/lib/subjects'
 import { streakOf } from '@/lib/streak'
 import type { MascotPose } from '@/components/Mascot'
 import { useResource } from '@/lib/useResource'
@@ -105,16 +104,16 @@ function Skeleton({ tab }: { tab: Tab }) {
   )
 }
 
-function Building({ subject }: { subject: SubjectKey }) {
+function Building({ subject }: { subject: string }) {
   return (
     <div
-      className={`a-drop flex items-center gap-3.5 rounded-[22px] bg-s-tint p-[18px] ${SUBJECTS[subject].className}`}
+      className={`a-drop flex items-center gap-3.5 rounded-[22px] bg-s-tint p-[18px] ${subjectClass(subject)}`}
       role="status"
       aria-live="polite"
     >
-      <SubjectTile subject={subject} size={48} className="a-pulse" />
+      <SubjectTile subject={subjectKey(subject)} size={48} className="a-pulse" />
       <div className="flex flex-1 flex-col gap-1.5">
-        <p className="text-base leading-snug font-bold">Building a {SUBJECTS[subject].label} plan…</p>
+        <p className="text-base leading-snug font-bold">Building the {subjectLabel(subject)} plan…</p>
         <div className="bar build-bar" style={{ height: 6, background: '#fff' }}>
           <i />
         </div>
@@ -185,13 +184,15 @@ function PlanTile({ plan, fresh }: { plan: Curriculum; fresh: boolean }) {
 function LessonsTab({
   child,
   plans,
+  days,
   building,
   freshId,
   onNewPlan,
 }: {
   child: Child
   plans: Curriculum[]
-  building: SubjectKey | null
+  days: string[]
+  building: string | null
   freshId: string | null
   onNewPlan: () => void
 }) {
@@ -202,9 +203,9 @@ function LessonsTab({
     return (
       <div className="grid gap-[22px] lg:grid-cols-2 lg:items-center lg:gap-10 lg:pt-4">
         <div className="stagger grid grid-cols-3 gap-2.5 md:gap-4 lg:order-2" aria-hidden="true">
-          {SUBJECT_KEYS.map((key) => (
-            <span key={key} className={`tile aspect-square w-full ${SUBJECTS[key].className}`} style={{ borderRadius: 26 }}>
-              <SubjectIcon subject={key} size={40} />
+          {gradePopular(child.gradeLevel).map(({ name, family }) => (
+            <span key={name} className={`tile aspect-square w-full ${SUBJECTS[family].className}`} style={{ borderRadius: 26 }}>
+              <SubjectIcon subject={family} size={40} />
             </span>
           ))}
         </div>
@@ -227,7 +228,7 @@ function LessonsTab({
 
   return (
     <div className="flex flex-col gap-[18px] md:gap-[26px]">
-      <StreakCard plans={plans} />
+      <StreakCard days={days} />
       <h1 className="q a-rise" style={{ fontSize: 'clamp(24px, 3.2vw, 34px)' }}>
         {upNext
           ? `Ready for ${nextLesson(upNext)?.estimatedMinutes ?? 10} minutes?`
@@ -351,6 +352,7 @@ function PlanRow({ plan, fresh }: { plan: Curriculum; fresh: boolean }) {
 function ParentsTab({
   child,
   plans,
+  days,
   building,
   freshId,
   onNewPlan,
@@ -358,17 +360,18 @@ function ParentsTab({
 }: {
   child: Child
   plans: Curriculum[]
-  building: SubjectKey | null
+  days: string[]
+  building: string | null
   freshId: string | null
   onNewPlan: () => void
-  onPickSubject: (subject: SubjectKey) => void
+  onPickSubject: (subject: string) => void
 }) {
   const changes = planChanges(plans)
   const average = averageScore(plans)
-  const streak = streakOf(plans)
+  const streak = streakOf(days)
 
   if (plans.length === 0 && !building) {
-    return <FirstPlan name={child.name} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
+    return <FirstPlan name={child.name} gradeLevel={child.gradeLevel} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
   }
 
   return (
@@ -426,13 +429,16 @@ export function HomePage() {
   const [tab, setTab] = useState<Tab>(readTab)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [draft, setDraft] = useState<PlanDraft>(EMPTY_DRAFT)
-  const [building, setBuilding] = useState<SubjectKey | null>(null)
+  const [building, setBuilding] = useState<string | null>(null)
   const [buildError, setBuildError] = useState('')
   const [freshId, setFreshId] = useState<string | null>(null)
 
   const children = useResource(api.listChildren)
   const load = useCallback(() => loadPlans(childId!), [childId])
   const plans = useResource(childId ? load : null, isAdjusting)
+  const loadStreak = useCallback(() => api.getStreak(childId!), [childId])
+  const streak = useResource(childId ? loadStreak : null)
+  const days = streak.data?.days ?? []
 
   const child = children.data?.children.find((candidate) => candidate.id === childId)
   const childMissing = children.data !== null && !child
@@ -450,10 +456,12 @@ export function HomePage() {
 
   function openDialog() {
     setBuildError('')
+    // No subject picked yet: start on the grade's math course.
+    if (child) setDraft((current) => (current.subject ? current : { ...current, subject: gradePopular(child.gradeLevel)[1].name }))
     setDialogOpen(true)
   }
 
-  function openForSubject(subject: SubjectKey) {
+  function openForSubject(subject: string) {
     setDraft({ ...EMPTY_DRAFT, subject })
     openDialog()
   }
@@ -468,7 +476,8 @@ export function HomePage() {
     try {
       const result = await api.createCurriculum({
         childId,
-        prompt: subjectKey(goal) === current.subject ? goal : `${goal} (${SUBJECTS[current.subject].label})`,
+        prompt: goal,
+        subject: current.subject || null,
         bookId: current.bookId,
         clarifications: current.questions.map((question, at) => ({
           question,
@@ -492,7 +501,8 @@ export function HomePage() {
   }
 
   const error = children.error ?? plans.error
-  const ready = child && plans.data
+  // A failed streak load shows no streak rather than blocking the page.
+  const ready = child && plans.data && (streak.data || streak.error)
 
   return (
     <div className="flex w-full flex-col gap-[18px] md:gap-[26px]">
@@ -515,13 +525,14 @@ export function HomePage() {
           <Skeleton tab={tab} />
         ) : (
           <div key={tab} className={tab === 'parents' ? 'a-step' : 'a-step-back'}>
-            <StreakNotice plans={plans.data!} childId={child.id} />
+            <StreakNotice plans={plans.data!} days={days} childId={child.id} />
             {tab === 'lessons' ? (
-              <LessonsTab child={child} plans={plans.data!} building={building} freshId={freshId} onNewPlan={openDialog} />
+              <LessonsTab child={child} plans={plans.data!} days={days} building={building} freshId={freshId} onNewPlan={openDialog} />
             ) : (
               <ParentsTab
                 child={child}
                 plans={plans.data!}
+                days={days}
                 building={building}
                 freshId={freshId}
                 onNewPlan={openDialog}
@@ -535,6 +546,7 @@ export function HomePage() {
       {dialogOpen && child && (
         <NewPlanDialog
           childName={child.name}
+          gradeLevel={child.gradeLevel}
           draft={draft}
           error={buildError}
           onChange={setDraft}

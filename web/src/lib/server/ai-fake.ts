@@ -3,6 +3,7 @@ import {
   EMBEDDING_DIMENSIONS,
   type AiService,
   type AttemptFeedbackInput,
+  type ExtendOutlineInput,
   type GenerateLessonInput,
   type GenerateOutlineInput,
   type PlannedLesson,
@@ -12,7 +13,7 @@ import {
   type ReplanInput,
   type UpdateLearnerNotesInput,
 } from "@/contracts/ai";
-import { CHOICES_PER_QUESTION, type BookSection, type LessonContent } from "@/contracts/domain";
+import { CHOICES_PER_QUESTION, type BookSection, type LessonBlock, type LessonContent } from "@/contracts/domain";
 
 // Deterministic stand-in for lib/ai, used until the real module is wired in
 // and in tests. Every output satisfies the contracts in contracts/ai.ts.
@@ -83,6 +84,66 @@ const OUTLINE_STEPS = [
   { title: "Putting it together", objective: "Apply everything without help." },
 ];
 
+const EXTEND_STEPS = [
+  { title: "Going further", objective: "Take the main ideas one step beyond the plan." },
+  { title: "Harder problems", objective: "Solve problems that need two ideas at once." },
+  { title: "Using it", objective: "Apply what was learned to a real situation." },
+];
+
+/** One block of each kind, so every renderer and check is exercised. */
+function fakeBlocks(skill: string): LessonBlock[] {
+  return [
+    {
+      type: "graph",
+      id: "graph-1",
+      title: "A line you can change",
+      caption: "Move the sliders and watch the line.",
+      xMin: -6,
+      xMax: 6,
+      yMin: -6,
+      yMax: 6,
+      parameters: [
+        { name: "m", label: "Slope", min: -3, max: 3, step: 0.5, value: 1 },
+        { name: "b", label: "Intercept", min: -4, max: 4, step: 1, value: 0 },
+      ],
+      elements: [
+        { kind: "function", expr: "m*x + b", dashed: false, label: "y = mx + b", tone: "primary" },
+        { kind: "point", x: "0", y: "b", label: "", tone: "secondary" },
+      ],
+      readouts: [{ label: "y at x = 2", expr: "2*m + b" }],
+    },
+    {
+      type: "number_line",
+      id: "line-1",
+      title: "Where the answer sits",
+      caption: "",
+      min: -5,
+      max: 5,
+      step: 1,
+      points: [{ value: 2, label: "2", open: false }],
+      ranges: [{ from: 2, to: null }],
+    },
+    {
+      type: "check",
+      id: "check-1",
+      prompt: `Quick check: which one shows ${label(skill)}?`,
+      choices: ["The correct answer", "A common mistake"],
+      answerIndex: 0,
+      feedback: ["Yes, that is the one.", "That is the usual slip. Look at the key idea again."],
+    },
+    {
+      type: "steps",
+      id: "steps-1",
+      title: `A worked example of ${label(skill)}`,
+      steps: [
+        { text: "Read what is asked.", math: "" },
+        { text: "Do the first step.", math: "2 + 2 = 4" },
+        { text: "Check the result.", math: "4 - 2 = 2" },
+      ],
+    },
+  ];
+}
+
 export const fakeAi: AiService = {
   async generateOutline(input: GenerateOutlineInput): Promise<OutlineResult> {
     const words = input.prompt.trim().split(/\s+/).filter(Boolean);
@@ -97,7 +158,7 @@ export const fakeAi: AiService = {
     return {
       kind: "outline",
       outline: {
-        subject: "General",
+        subject: input.subject ?? input.subjects?.[0] ?? "General",
         title: input.prompt.trim().slice(0, 60),
         lessons: OUTLINE_STEPS.map((step, i) => ({
           title: sections.length ? `${step.title}: ${sections[i % sections.length].title}` : step.title,
@@ -107,6 +168,23 @@ export const fakeAi: AiService = {
           estimatedMinutes: 6 + i * 2,
         })),
       },
+    };
+  },
+
+  async extendOutline(input: ExtendOutlineInput) {
+    const sections = input.bookSections;
+    const taught = new Set(input.lessons.map((l) => l.bookSectionIndex));
+    const untaught = sections.filter((s) => !taught.has(s.index));
+    // Numbered by round, so a second "keep going" does not repeat the first.
+    const round = Math.floor(input.lessons.filter((l) => /^(Going further|Harder problems|Using it)/.test(l.title)).length / EXTEND_STEPS.length) + 2;
+    return {
+      lessons: EXTEND_STEPS.slice(0, input.maxLessons).map((step, i) => ({
+        title: `${step.title} ${round}${untaught[i] ? `: ${untaught[i].title}` : ""}`,
+        objective: step.objective,
+        skills: [i === 0 && input.knownSkills[0] ? input.knownSkills[0] : `${slugify(input.subject)}-${slugify(step.title)}-${round}`],
+        bookSectionIndex: untaught[i]?.index ?? null,
+        estimatedMinutes: 12 + i,
+      })),
     };
   },
 
@@ -135,8 +213,17 @@ export const fakeAi: AiService = {
     const source = input.sourceChunks.length
       ? `\n\n### From the book\n\n${input.sourceChunks[0].slice(0, 300)}`
       : "";
+    const blocks = fakeBlocks(skills[0]);
     return {
-      bodyMarkdown: `## ${input.lesson.title}\n\n${input.lesson.objective}\n\n### Key idea\n\nSample lesson about **${label(skills[0])}**.${source}`,
+      bodyMarkdown: [
+        `## ${input.lesson.title}\n\n${input.lesson.objective}`,
+        `### Key idea\n\nSample lesson about **${label(skills[0])}**.${source}`,
+        "[[graph-1]]",
+        "[[check-1]]",
+        "### Worked example\n\n[[steps-1]]",
+        "[[line-1]]",
+      ].join("\n\n"),
+      blocks,
       questions,
     };
   },

@@ -82,6 +82,18 @@ check(after.body.replanStatus === "idle", "replan finished in the background");
 check(after.body.lessons.some((l) => l.kind === "remedial") && after.body.lessons.some((l) => l.kind === "retry"), "remedial and retry lessons inserted");
 check(after.body.replanEvents.length === 1, "replan event recorded");
 
+const streak = await api("GET", `/api/children/${child.body.id}/streak`);
+check(streak.status === 200 && streak.body.days.length === 1, "quiz day saved for the streak");
+
+const picked = await api("POST", "/api/curricula", {
+  childId: child.body.id, prompt: "the war of 1812 and why it started", bookId: null, clarifications: [], subject: "Social Studies",
+});
+check(picked.status === 201 && picked.body.curriculum.subject === "Social Studies", "plan keeps the picked grade subject");
+const offGrade = await api("POST", "/api/curricula", {
+  childId: child.body.id, prompt: "algebra one practice for tests", bookId: null, clarifications: [], subject: "Algebra I",
+});
+check(offGrade.status === 400, "a subject from another grade is refused");
+
 const profile = await poll(() => api("GET", `/api/children/${child.body.id}/profile`), (r) => r.body.notes !== "");
 check(profile.body.mastery.length > 0 && profile.body.notes !== "", "mastery and learner notes updated");
 

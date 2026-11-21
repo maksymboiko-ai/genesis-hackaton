@@ -319,6 +319,38 @@ export class SupabaseStore implements Store {
     return data as string;
   }
 
+  async appendLessons(curriculumId: string, lessons: NewLesson[]) {
+    if (lessons.length === 0) return [];
+    const { data: last, error: e1 } = await this.db
+      .from("lesson")
+      .select("position")
+      .eq("curriculum_id", curriculumId)
+      .order("position", { ascending: false })
+      .limit(1);
+    check(e1, "last lesson position");
+    const start = last?.length ? (last[0] as { position: number }).position + 1 : 0;
+    // One insert statement: all the lessons are added, or none.
+    const { data, error } = await this.db
+      .from("lesson")
+      .insert(
+        lessons.map((l, i) => ({
+          curriculum_id: curriculumId,
+          position: start + i,
+          kind: l.kind,
+          title: l.title,
+          objective: l.objective,
+          skills: l.skills,
+          retry_of_lesson_id: l.retryOfLessonId,
+          book_section_index: l.bookSectionIndex,
+          reason: l.reason,
+          estimated_minutes: l.estimatedMinutes,
+        })),
+      )
+      .select("id, position");
+    check(error, "append lesson");
+    return (data as { id: string; position: number }[]).sort((a, b) => a.position - b.position).map((r) => r.id);
+  }
+
   async listCurricula(childId: string) {
     const { data, error } = await this.db
       .from("curriculum")
@@ -388,6 +420,24 @@ export class SupabaseStore implements Store {
       .eq("id", id)
       .eq("content_status", "generating");
     check(error, "fail lesson");
+  }
+
+  async addActivityDay(childId: string, day: string) {
+    const { error } = await this.db
+      .from("child_activity_day")
+      .upsert({ child_id: childId, day }, { onConflict: "child_id,day", ignoreDuplicates: true });
+    check(error, "add activity day");
+  }
+
+  async listActivityDays(childId: string, limit: number) {
+    const { data, error } = await this.db
+      .from("child_activity_day")
+      .select("day")
+      .eq("child_id", childId)
+      .order("day", { ascending: false })
+      .limit(limit);
+    check(error, "list activity days");
+    return (data as { day: string }[]).map((row) => row.day);
   }
 
   async recordAttempt(input: {

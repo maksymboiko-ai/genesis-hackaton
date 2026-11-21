@@ -150,6 +150,11 @@ export interface Store {
     title: string;
     lessons: NewLesson[];
   }): Promise<string>;
+  /**
+   * Adds lessons after the last one and returns their ids in order. The
+   * caller holds the replan claim, so positions cannot move meanwhile.
+   */
+  appendLessons(curriculumId: string, lessons: NewLesson[]): Promise<string[]>;
   /** Newest first. */
   listCurricula(childId: string): Promise<CurriculumRow[]>;
   getCurriculum(id: string): Promise<CurriculumRow | null>;
@@ -188,6 +193,12 @@ export interface Store {
   listCurriculumAttempts(curriculumId: string, sinceIso: string | null, limit: number): Promise<AttemptRow[]>;
   /** A child's latest attempts across their latest curricula, newest first. */
   listChildAttempts(childId: string, limit: number): Promise<AttemptRow[]>;
+
+  // --- streak ---
+  /** Marks a day (YYYY-MM-DD, the child's calendar) as active; repeats are no-ops. */
+  addActivityDay(childId: string, day: string): Promise<void>;
+  /** The child's active days, newest first, at most limit. */
+  listActivityDays(childId: string, limit: number): Promise<string[]>;
 
   // --- replan ---
   /** Moves the curriculum to 'running' if idle or stale. True for the claimer. */

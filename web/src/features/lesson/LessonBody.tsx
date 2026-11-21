@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react'
 import Markdown from 'react-markdown'
 import type { Components } from 'react-markdown'
+import type { LessonBlock } from '@/contracts/domain'
+import { splitBody } from '@/lib/lesson-blocks'
 import type { SubjectKey } from '@/lib/subjects'
+import { CheckBlock } from './CheckBlock'
+import { GraphBlock } from './GraphBlock'
+import { NumberLineBlock } from './NumberLineBlock'
+import { StepsBlock } from './StepsBlock'
 import { splitLabel } from './text'
 import type { Section } from './text'
 
@@ -64,15 +70,43 @@ function PassageLine({ number, children }: { number: number; children: ReactNode
   )
 }
 
+function BlockView({ block }: { block: LessonBlock }) {
+  switch (block.type) {
+    case 'graph':
+      return <GraphBlock block={block} />
+    case 'number_line':
+      return <NumberLineBlock block={block} />
+    case 'check':
+      return <CheckBlock block={block} />
+    case 'steps':
+      return <StepsBlock block={block} />
+  }
+}
+
 export function LessonBody({
   sections,
+  blocks,
   subject,
 }: {
   sections: Section[]
+  blocks: LessonBlock[]
   subject: SubjectKey
 }) {
   const map = components(subject)
-  const md = (body: string) => <Markdown components={map}>{body}</Markdown>
+  // A line holding only [[block-id]] is where that block goes; a placeholder
+  // with no block behind it shows nothing.
+  const md = (body: string) =>
+    splitBody(body).map((part, index) => {
+      if (part.kind === 'markdown') {
+        return (
+          <Markdown key={index} components={map}>
+            {part.text}
+          </Markdown>
+        )
+      }
+      const block = blocks.find((item) => item.id === part.id)
+      return block ? <BlockView key={block.id} block={block} /> : null
+    })
 
   return (
     <div className="ld">

@@ -10,12 +10,10 @@ import { SubjectTile } from '@/components/SubjectTile'
 import { Wordmark } from '@/components/Wordmark'
 import type { Child } from '@/contracts/domain'
 import { api } from '@/lib/api'
-import { SUBJECTS, SUBJECT_KEYS, subjectKey } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { gradeSubjects, subjectClass } from '@/lib/subjects'
 import { BuildingPlan } from './BuildingPlan'
 import { Explainer, StatAnxiety, StatSchool } from './InfoScreens'
 import {
-  COMING_SOON,
   EMPTY_ANSWERS,
   FORMAT,
   GOAL_MAX,
@@ -88,7 +86,8 @@ export function ChildQuiz({
   const building = saving === 'plan' || built !== null
   const canContinue = screen.kind === 'info' || isAnswered(screen.id, answers)
   const busy = saving !== null
-  const planSubject: SubjectKey = answers.subjects[0] ?? subjectKey(answers.goal)
+  const planSubject = answers.subjects[0] ?? answers.goal
+  const subjectsOfGrade = gradeSubjects(answers.gradeLevel)
 
   useEffect(() => {
     if (index > 0) headingRef.current?.focus({ preventScroll: true })
@@ -101,12 +100,20 @@ export function ChildQuiz({
     setIndex(next)
   }
 
-  const toggleSubject = (value: SubjectKey) =>
+  const toggleSubject = (value: string) =>
     set({
       subjects: answers.subjects.includes(value)
         ? answers.subjects.filter((item) => item !== value)
-        : SUBJECT_KEYS.filter((key) => key === value || answers.subjects.includes(key)),
+        : subjectsOfGrade
+            .map((subject) => subject.name)
+            .filter((name) => name === value || answers.subjects.includes(name)),
     })
+
+  // A new grade has other subjects: keep only the picks it also has.
+  const pickGrade = (gradeLevel: number) => {
+    const names = new Set(gradeSubjects(gradeLevel).map((subject) => subject.name))
+    set({ gradeLevel, subjects: answers.subjects.filter((name) => names.has(name)) })
+  }
 
   const toggleObstacle = (value: string) => {
     if (answers.obstacles.includes(value)) {
@@ -133,11 +140,13 @@ export function ChildQuiz({
     if (!withPlan) return onDone(saved, null)
 
     try {
-      const request = { childId: saved.id, prompt: answers.goal.trim(), bookId: null }
+      // One picked subject is the plan's subject; with several, the goal decides.
+      const subject = answers.subjects.length === 1 ? answers.subjects[0] : null
+      const request = { childId: saved.id, prompt: answers.goal.trim(), bookId: null, subject }
       let result = await api.createCurriculum({ ...request, clarifications: [] })
       if (result.status === 'needs_clarification') {
         const known = [
-          answers.subjects.length > 0 && `Subjects: ${answers.subjects.map((key) => SUBJECTS[key].label).join(', ')}.`,
+          answers.subjects.length > 0 && `Subjects: ${answers.subjects.join(', ')}.`,
           `Grade ${saved.gradeLevel}.`,
           'Use your best judgement for anything else.',
         ]
@@ -245,7 +254,7 @@ export function ChildQuiz({
                 type="button"
                 role="radio"
                 aria-checked={answers.gradeLevel === grade}
-                onClick={() => set({ gradeLevel: grade })}
+                onClick={() => pickGrade(grade)}
                 className={`opt grade ${answers.gradeLevel === grade ? 'on' : ''}`}
               >
                 {grade}
@@ -257,21 +266,21 @@ export function ChildQuiz({
         {screen.id === 'subjects' && (
           <>
             <div className="stagger flex flex-col gap-2.5">
-              {SUBJECT_KEYS.map((key) => {
-                const on = answers.subjects.includes(key)
+              {subjectsOfGrade.map((subject) => {
+                const on = answers.subjects.includes(subject.name)
                 return (
                   <button
-                    key={key}
+                    key={subject.name}
                     type="button"
                     aria-pressed={on}
-                    onClick={() => toggleSubject(key)}
+                    onClick={() => toggleSubject(subject.name)}
                     className={`opt ${on ? 'on' : ''}`}
                     style={{ minHeight: 76 }}
                   >
-                    <SubjectTile subject={key} size={48} />
+                    <SubjectTile subject={subject.family} size={48} />
                     <span className="flex flex-col gap-0.5">
-                      <span>{SUBJECTS[key].label}</span>
-                      <span className="sm">{SUBJECTS[key].blurb}</span>
+                      <span>{subject.name}</span>
+                      <span className="sm">{subject.blurb}</span>
                     </span>
                     <span className="cb">
                       <Mark />
@@ -279,16 +288,6 @@ export function ChildQuiz({
                   </button>
                 )
               })}
-            </div>
-            <div className="flex flex-col gap-2">
-              <p className="sm">Coming soon</p>
-              <div className="flex flex-wrap gap-1.5">
-                {COMING_SOON.map((label) => (
-                  <span key={label} className="chip sm-chip bg-surface-2 text-muted">
-                    {label}
-                  </span>
-                ))}
-              </div>
             </div>
           </>
         )}
@@ -381,7 +380,7 @@ export function ChildQuiz({
                   key={starter.label}
                   type="button"
                   onClick={() => set({ goal: starter.label })}
-                  className={`chip ${SUBJECTS[starter.subject].className} bg-s-tint text-s-ink`}
+                  className={`chip ${subjectClass(starter.subject)} bg-s-tint text-s-ink`}
                 >
                   {starter.label}
                 </button>
@@ -490,7 +489,7 @@ function Shell({ embedded, top, children }: { embedded: boolean; top?: ReactNode
       }`}
     >
       <header className="grid items-center px-2 pt-3 md:grid-cols-[200px_1fr_200px] md:px-8 md:pt-5">
-        {embedded ? <span className="hidden md:block" /> : <Wordmark className="hidden md:block" />}
+        {embedded ? <span className="hidden md:block" /> : <Wordmark className="hidden md:inline-flex" />}
         <div className="w-full max-w-[520px] justify-self-center pr-2 md:pr-0">{top}</div>
         <span className="hidden md:block" />
       </header>

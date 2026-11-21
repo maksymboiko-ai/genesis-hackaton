@@ -250,6 +250,20 @@ Added after checking the approved screens (`Product — learning app identity & 
 | C2 | Checks: types, lint, tests, SQL, build, HTTP smoke | ✅ | 98 tests; SQL 0004–0007; `next build`; smoke 26/26 incl. sign up, isolation, wrong password, logout; audit 0 |
 | C3 | Merge `backend` into `main` (local; push on approval) | ✅ | merged locally with `--no-ff`; not pushed |
 
+### M10: subjects by grade and saved streak
+
+| # | Module | Status | Notes |
+|---|---|---|---|
+| S1 | Shared catalog `contracts/subjects.ts`: subjects of grades 1–12, family (colour, icon), blurb; 3 core per grade | ✅ | English, math, science course of the grade are "popular" |
+| S2 | Onboarding lists every subject of the chosen grade; changing grade drops picks it lacks | ✅ | "Coming soon" chips removed |
+| S3 | First-plan screen: the grade's 3 core subjects; new-plan dialog: all grade subjects | ✅ | |
+| S4 | API: optional `subject` on `POST /curricula`; off-grade subject → 400; model gets the grade list; drift mapped back | ✅ | names kept as written ("U.S. History"), no lowercasing |
+| T1 | Migration `0008`: `child_activity_day` (RLS on, backfilled from attempts in UTC) | ✅ | SQL test |
+| T2 | Attempt saves the day in the child's calendar (`X-Timezone`, UTC fallback) | ✅ | retakes count |
+| T3 | `GET /api/children/:id/streak` → `{ days }`, owner only | ✅ | |
+| T4 | Streak pill, card, notice, page and +1 moment use saved days | ✅ | turtle pose from the saved streak |
+| C4 | Checks | ✅ | 141 tests (after rebasing on rich lessons + CI); SQL 0004–0008; `next build`; smoke 29/29; screens checked in mock mode |
+
 ### Verification at the end of M7
 
 | Check | Result |
@@ -265,7 +279,7 @@ Not verified from here: the Supabase store against a real project (only type-che
 
 ## 6. How to run
 
-1. Supabase: apply `0001` → `0007` in order; create a **private** storage bucket `books`.
+1. Supabase: apply `0001` → `0008` in order; create a **private** storage bucket `books`.
 2. `cp web/.env.example web/.env.local` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`.
 3. Frontend on the real API: `NEXT_PUBLIC_API_MOCK=false`.
 4. Without a database or key: `STORE=memory AI_MODE=fake npm run dev`.

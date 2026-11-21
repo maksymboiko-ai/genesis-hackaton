@@ -1,5 +1,5 @@
 import "server-only";
-import type { LessonContent, QuestionResult } from "@/contracts/domain";
+import type { LessonContentInput, QuestionResult } from "@/contracts/domain";
 import { getAi } from "./ai";
 import { summarizeAttempt } from "./replan";
 import type { AttemptRow, LessonRow } from "./store/types";
@@ -45,7 +45,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 export async function attemptFeedback(input: {
   lesson: LessonRow;
-  content: LessonContent;
+  content: LessonContentInput;
   results: QuestionResult[];
   score: number;
   subject: string;

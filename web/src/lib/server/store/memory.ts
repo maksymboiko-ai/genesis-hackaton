@@ -24,6 +24,7 @@ export type MemoryData = {
   replanEvents: ReplanEventRow[];
   chunks: ChunkRow[];
   attempts: AttemptRow[];
+  activityDays: { childId: string; day: string }[];
   files: Map<string, Uint8Array>;
   llmCalls: LlmCallRow[];
 };
@@ -45,7 +46,7 @@ function cosine(a: number[], b: number[]): number {
 }
 
 export function emptyData(): MemoryData {
-  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], files: new Map(), llmCalls: [] };
+  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], activityDays: [], files: new Map(), llmCalls: [] };
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -220,6 +221,16 @@ export class MemoryStore implements Store {
     return id;
   }
 
+  async appendLessons(curriculumId: string, lessons: NewLesson[]) {
+    if (!this.data.curricula.some((c) => c.id === curriculumId)) throw new Error("fk violation: curriculum");
+    const positions = this.data.lessons.filter((l) => l.curriculumId === curriculumId).map((l) => l.position);
+    const start = positions.length ? Math.max(...positions) + 1 : 0;
+    // Build everything first so a bad lesson leaves nothing behind.
+    const rows = lessons.map((l, i) => this.newLessonRow(curriculumId, start + i, l));
+    this.data.lessons.push(...rows);
+    return rows.map((r) => r.id);
+  }
+
   async listCurricula(childId: string) {
     return copy(
       this.data.curricula
@@ -279,6 +290,22 @@ export class MemoryStore implements Store {
   async failLesson(id: string) {
     const row = this.data.lessons.find((l) => l.id === id && l.contentStatus === "generating");
     if (row) row.contentStatus = "failed";
+  }
+
+  async addActivityDay(childId: string, day: string) {
+    if (!this.data.children.some((c) => c.id === childId)) throw new Error("fk violation: child");
+    if (!this.data.activityDays.some((d) => d.childId === childId && d.day === day)) {
+      this.data.activityDays.push({ childId, day });
+    }
+  }
+
+  async listActivityDays(childId: string, limit: number) {
+    return this.data.activityDays
+      .filter((d) => d.childId === childId)
+      .map((d) => d.day)
+      .sort()
+      .reverse()
+      .slice(0, limit);
   }
 
   async recordAttempt(input: {

@@ -10,6 +10,7 @@ import {
   Curriculum,
   Id,
   LearnerProfile,
+  LessonBlock,
   LessonSummary,
   MAX_CLARIFYING_QUESTIONS,
   Question,
@@ -111,7 +112,9 @@ export const GetBookResponse = Book;
 
 // POST /curricula
 // Generates the outline before responding (expect several seconds), then
-// starts generating the first lesson in the background.
+// starts generating the first lesson in the background. The plan is as long
+// as the goal needs: a few lessons for one narrow skill, up to
+// MAX_OUTLINE_LESSONS for a whole subject.
 //
 // If the prompt is too vague to plan, nothing is stored and the response is
 // "needs_clarification". Show the questions, then send the same request again
@@ -122,6 +125,9 @@ export const CreateCurriculumRequest = z.object({
   bookId: Id.nullable(),
   // [] on the first call.
   clarifications: z.array(Clarification).max(MAX_CLARIFYING_QUESTIONS),
+  // One of the child's grade subjects (contracts/subjects.ts), or null to
+  // let the plan pick the grade subject the goal is about.
+  subject: z.string().trim().min(1).max(80).nullish(),
 });
 export type CreateCurriculumRequest = z.infer<typeof CreateCurriculumRequest>;
 export const CreateCurriculumResponse = z.discriminatedUnion("status", [
@@ -133,6 +139,14 @@ export const CreateCurriculumResponse = z.discriminatedUnion("status", [
 ]);
 export type CreateCurriculumResponse = z.infer<typeof CreateCurriculumResponse>;
 
+// GET /children/:childId/streak
+// The days the child finished a quiz, newest first, as YYYY-MM-DD in the
+// child's calendar. The app derives the streak, freezes and week view.
+export const GetStreakResponse = z.object({
+  days: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
+});
+export type GetStreakResponse = z.infer<typeof GetStreakResponse>;
+
 // GET /curricula?childId=...
 export const ListCurriculaResponse = z.object({
   curricula: z.array(Curriculum.omit({ lessons: true, replanEvents: true })),
@@ -143,10 +157,19 @@ export type ListCurriculaResponse = z.infer<typeof ListCurriculaResponse>;
 // Poll this while replanStatus is "running" to pick up inserted lessons.
 export const GetCurriculumResponse = Curriculum;
 
+// POST /curricula/:curriculumId/extend
+// "Keep going": the child finished every lesson and wants more. Plans up to
+// MAX_EXTEND_LESSONS further lessons from the plan so far and the child's
+// results, appends them as "core" lessons and starts generating the first.
+// Responds when they are in place (expect several seconds). No body.
+// "conflict" (409) when a lesson is still unfinished, the plan is being
+// changed right now, or it already holds MAX_CURRICULUM_LESSONS.
+export const ExtendCurriculumResponse = Curriculum;
+
 // --- Lessons --------------------------------------------------------------
 
-// A question as the child sees it: no answer, no explanation, no per-choice
-// feedback (it gives the answer away).
+// A quiz question as the child sees it: no answer, no explanation, no
+// per-choice feedback (it gives the answer away).
 export const PublicQuestion = Question.omit({
   correctIndex: true,
   explanation: true,
@@ -161,7 +184,13 @@ export const GetLessonResponse = LessonSummary.extend({
   contentStatus: ContentStatus,
   content: z
     .object({
+      // Markdown with block placeholders: a line holding only [[block-id]]
+      // is where the block with that id goes.
       bodyMarkdown: z.string(),
+      // Graphs, number lines, quick checks and step-by-step examples. Sent
+      // whole, answers of the quick checks included: they are practice with
+      // instant feedback and are never graded.
+      blocks: z.array(LessonBlock),
       questions: z.array(PublicQuestion),
     })
     .nullable(),

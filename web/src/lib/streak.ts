@@ -1,5 +1,4 @@
 import type { MascotPose } from '@/components/Mascot'
-import type { Curriculum } from '@/contracts/domain'
 
 export type DayState = 'done' | 'frozen' | 'today' | 'missed' | 'ahead'
 export type StreakState = 'done' | 'pending' | 'frozen' | 'none'
@@ -51,11 +50,15 @@ function runEndingAt(done: Set<string>, end: Date) {
   return { count, frozen }
 }
 
-export function streakOf(plans: Curriculum[], now = new Date()): StreakInfo {
-  const dates = plans
-    .flatMap((plan) => plan.lessons)
-    .filter((lesson) => lesson.completedAt)
-    .map((lesson) => startOfDay(new Date(lesson.completedAt!)))
+// A saved day (YYYY-MM-DD, the child's calendar) as a local date.
+function fromDay(day: string) {
+  const [year, month, date] = day.split('-').map(Number)
+  return new Date(year, month - 1, date)
+}
+
+/** The streak from the days the server saved (GET /children/:id/streak). */
+export function streakOf(days: string[], now = new Date()): StreakInfo {
+  const dates = days.map(fromDay)
   const done = new Set(dates.map(dayKey))
 
   const today = startOfDay(now)

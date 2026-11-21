@@ -118,3 +118,21 @@ Time and cost are the map call alone, averaged over the 3 long-book runs (about 
 - **The fixtures are made up and tidy.** The long book repeats the same paragraph shapes in every section. Real PDF text has running headers, page numbers and broken lines, which none of these books have.
 - **Headings the chunker does not recognize are not tested.** Chunks are cut at "Chapter 3", "4.2 Title", "Lesson 3" and Markdown headings. A book with other heading styles is cut by size alone, a heading can then fall outside the 500 characters the model sees, and no model can place that section.
 - 3 runs per case: a one-run difference is noise.
+
+## Longer lessons with interactive blocks
+
+Run on 2026-11-21, after lessons grew to 350–1,200 words with graphs, number lines, quick checks and stepped examples. The 8 lesson cases, 2 runs each (16 per model), with the new length and block checks.
+
+| Model | Passed | Retries | Avg time | Longest | Cost per lesson |
+|---|---|---|---|---|---|
+| `google/gemini-3.5-flash-lite` (default) | 12/16 | 5 | 9 s | 21 s | $0.012 |
+| `google/gemini-3.8-flash` | 16/16 | 0 | 34 s | 59 s | $0.026 |
+
+- **`gemini-3.5-flash-lite` stays the default.** Before lessons were checked for length it wrote 330–570 words where 700 were asked for in 3 of 8 lessons. `generateLesson` now sends a lesson back once when it is under 80% of the smallest length, has fewer than 2 checks or has no stepped example; with that every lesson in this run reached its length. The 5 retries are those send-backs.
+- **What it still gets wrong:** the correct choice sat in the same position in every quiz question (2 of 16), the book's own term "Scales Check" was missing (2 of 16), and one lesson kept a single check after the retry.
+- **`gemini-3.8-flash` passed everything with no retry, but takes 34 s on average and up to 59 s.** Lessons are generated inside a route with a 60-second limit, and the next lesson is prefetched in the same job, so switching needs a longer limit first.
+
+### Limits
+
+- 2 runs per case: a one-run difference is noise.
+- The checks are structural (length, counts, placement, valid figures). Whether a graph is the right picture for the idea, and whether the text matches it, was only read by hand in a few lessons.
