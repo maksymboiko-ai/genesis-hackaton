@@ -59,6 +59,25 @@ export const Child = z.object({
 });
 export type Child = z.infer<typeof Child>;
 
+// One section of an uploaded book. The list of sections, in reading order,
+// is the "book map" built at ingestion and stored in book.sections. A
+// curriculum built from a book is planned from the map, and each lesson
+// retrieves its excerpts from one section.
+export const BookSection = z.object({
+  // Position in the map, from 0. book_chunk.section_index and
+  // lesson.book_section_index refer to it.
+  index: z.number().int().min(0),
+  // The chapter the section belongs to, or "" when the book has none.
+  chapter: z.string(),
+  title: z.string(),
+  // One or two sentences on what the section teaches.
+  summary: z.string(),
+});
+export type BookSection = z.infer<typeof BookSection>;
+
+// How many book chunks a lesson is generated from.
+export const LESSON_CHUNK_LIMIT = 8;
+
 export const Book = z.object({
   id: Id,
   title: z.string().min(1),

@@ -1,6 +1,6 @@
 # Architecture
 
-A children's learning app. A parent or child describes a goal ("my child got a B in algebra"), and the app builds a curriculum that repairs itself as the child learns, adapts to the child across subjects, and can ground its lessons in an uploaded textbook.
+A children's learning app for the US market; everything the product shows or generates is in English. A parent or child describes a goal ("my child got a B in algebra"), and the app builds a curriculum that repairs itself as the child learns, adapts to the child across subjects, and can ground its lessons in an uploaded textbook.
 
 Three people build it: **Frontend**, **Backend** and **AI**. This document and the files in [web/src/contracts/](web/src/contracts/) define where one person's work ends and the next begins. If something you need is not in a contract, change the contract first (see [Changing a contract](#changing-a-contract)).
 
@@ -91,7 +91,7 @@ Defined in full in [supabase/migrations/0001_init.sql](supabase/migrations/0001_
 | `attempt` | One quiz submission, with per-question results |
 | `skill_mastery` | A 0 to 1 score per child, subject and skill |
 | `replan_event` | A record of each self-healing change, for display |
-| `book`, `book_chunk` | Uploaded textbooks and their embedded chunks |
+| `book`, `book_chunk` | Uploaded textbooks, their section map and their embedded chunks |
 | `llm_call` | Model, latency and token counts for every model call |
 
 Two ideas carry the design:
@@ -115,15 +115,15 @@ The current lesson is the one with the lowest `position` that has no `completed_
 ### Create a curriculum
 
 1. Frontend sends `POST /api/curricula` with the child, the prompt and an optional book.
-2. Backend builds the `LearnerProfile` from `child.notes` and `skill_mastery`. If there is a book, it embeds the prompt and fetches the nearest chunks.
-3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies.
+2. Backend builds the `LearnerProfile` from `child.notes` and `skill_mastery`. If there is a book, it loads the book's section map (`book.sections`).
+3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies. With a book, each lesson also names the section it is taught from, stored in `lesson.book_section_index`.
    - If the prompt is too vague to plan ("help with math"), `generateOutline` returns up to 3 clarifying questions instead. Backend stores nothing and responds with `status: 'needs_clarification'`. Frontend shows the questions and sends the same request again with the answers in `clarifications`; with answers present the result is always an outline, so there is one round at most.
 4. Backend stores the curriculum and its lessons with `content_status = 'pending'`, responds, and starts generating the first lesson in the background.
 
 ### Open a lesson
 
 1. Frontend sends `GET /api/lessons/:id` and polls until `contentStatus` is `ready`.
-2. If the content is `pending`, the backend marks it `generating`, fetches book chunks for the lesson's objective, calls `generateLesson` and stores the result.
+2. If the content is `pending`, the backend marks it `generating`, fetches the lesson's book chunks (see [Textbook grounding](#textbook-grounding-rag)), calls `generateLesson` and stores the result.
 3. When a lesson becomes ready, the backend starts generating the next one, so the child rarely waits.
 4. Responses never include `correctIndex` or `explanation`.
 
@@ -168,13 +168,17 @@ To stop skill names drifting ("linear-equations" and "solving-linear-equations")
 ### Textbook grounding (RAG)
 
 1. Frontend uploads a PDF with `POST /api/books`. Backend stores the file and responds with `status: 'processing'`.
-2. In the background the backend extracts the text, then calls `chunkText` and `embed`, and stores the chunks.
-3. At generation time the backend embeds the query (the prompt, or a lesson's title and objective), calls the `match_book_chunks` database function and passes the text as `sourceChunks`.
+2. In the background the backend extracts the text and calls `prepareBook`. The AI module splits the text into chunks at headings, asks a model for the book map (the ordered list of sections, each with a chapter, a title and a summary), assigns every chunk to a section and embeds the chunks. Backend stores the map in `book.sections` and the chunks in `book_chunk`.
+3. **A curriculum is planned from the map, not from a similarity search.** The nearest few chunks to a goal are scattered passages; the map is the book's actual structure. `generateOutline` receives the whole map as `bookSections` and ties each lesson to one section.
+4. **A lesson is written from its section.** If the section has at most `LESSON_CHUNK_LIMIT` chunks, the backend passes all of them. Otherwise it embeds the lesson's title and objective and calls `match_book_chunks` with the section index for the nearest `LESSON_CHUNK_LIMIT`. Either way the chunks go into `sourceChunks` in reading order (by `chunk_index`).
+5. A lesson with no section (a remedial or extension lesson) searches the whole book the same way, without the section index. A retry lesson keeps the section of the lesson it repeats.
+
+Retrieval is always scoped to one book by `book_id`, so one family's upload never reaches another's lessons. Books have no owner yet (see [Out of scope](#out-of-scope-for-the-mvp)), so every book is listed for everyone.
 
 ## Models and evals
 
 - All model calls go through one OpenRouter client in `lib/ai/`.
-- `lib/ai/models.ts` maps each task (`outline`, `lesson`, `replan`, `learner_notes`) to a default model. Every `AiService` function accepts a `model` override.
+- `lib/ai/models.ts` maps each task (`outline`, `lesson`, `replan`, `learner_notes`, `book_map`) to a default model. Every `AiService` function accepts a `model` override.
 - Structured output uses `response_format` with `type: "json_schema"` and `strict: true`, generated from the Zod schemas in `web/src/contracts/ai.ts`. Requests set `provider.require_parameters: true` so OpenRouter only routes to endpoints that support it.
 - Enforcement differs between providers, so every response is still parsed with Zod. On failure the function retries once, then throws.
 - Model-facing schemas stay plain (no optional fields, no length or range limits) so they work across providers. Counts and ranges are checked in code.
@@ -208,6 +212,8 @@ A change to anything in `web/src/contracts/` or `supabase/migrations/` goes in i
 - **Streaming lesson text.** Lessons are generated ahead of time and fetched by polling.
 - **Free-text answers.** Quizzes are multiple choice with 4 options, graded in code.
 - **Scanned textbooks.** Only PDFs with a text layer are supported.
+- **Book ownership.** A book has no owner; it arrives with real accounts.
+- **Other languages.** English only.
 
 ## Known risks
 

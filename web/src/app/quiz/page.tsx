@@ -1,10 +1,10 @@
 import { Stage } from '@/components/Stage'
-import { QuizPage } from '@/features/quiz/QuizPage'
+import { OnboardingPage } from '@/features/onboarding/OnboardingPage'
 
 export default function Page() {
   return (
     <Stage path="/quiz">
-      <QuizPage />
+      <OnboardingPage />
     </Stage>
   )
 }
