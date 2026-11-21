@@ -11,7 +11,7 @@ import { SubjectIcon } from '@/components/SubjectTile'
 import { REPLAN_WINDOW } from '@/contracts/domain'
 import type { Curriculum, LessonSummary, ReplanEvent } from '@/contracts/domain'
 import { api } from '@/lib/api'
-import { SUBJECTS, subjectKey } from '@/lib/subjects'
+import { SUBJECTS, subjectKey, subjectLabel } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import { KeepGoing } from './KeepGoing'
 import './plan.css'
@@ -498,7 +498,7 @@ export function CurriculumPage() {
             <b className="grid size-7 place-items-center rounded-[9px] bg-s text-white">
               <SubjectIcon subject={subject} size={16} />
             </b>
-            {SUBJECTS[subject].label}
+            {subjectLabel(curriculum.subject)}
           </span>
           <h1 className="q" style={{ fontSize: 30 }}>
             {curriculum.title}

@@ -272,6 +272,11 @@ export type GenerateOutlineInput = {
   // The map of the source book, or [] when there is no book. The outline is
   // planned from the whole map, not from retrieved excerpts.
   bookSections: BookSection[];
+  // The subjects of the learner's grade. The outline's subject is exactly
+  // one of these names.
+  subjects?: string[];
+  // The subject the parent picked, or null to choose from subjects.
+  subject?: string | null;
 };
 
 // A lesson already in the plan, as the model sees it when continuing.

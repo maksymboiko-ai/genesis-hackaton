@@ -11,7 +11,7 @@ import { SubjectTile } from '@/components/SubjectTile'
 import type { GetLessonResponse, SubmitAttemptResponse } from '@/contracts/api'
 import type { Curriculum, LessonBlock } from '@/contracts/domain'
 import { api } from '@/lib/api'
-import { SUBJECTS, subjectKey } from '@/lib/subjects'
+import { SUBJECTS, subjectKey, subjectLabel } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import { LessonBody } from './LessonBody'
 import { Quiz } from './Quiz'
@@ -313,7 +313,7 @@ function Reading({
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="subj">
                 <SubjectTile subject={subject} size={26} />
-                {SUBJECTS[subject].label}
+                {curriculum ? subjectLabel(curriculum.subject) : SUBJECTS[subject].label}
               </span>
               {lesson.kind !== 'core' && <KindTag kind={lesson.kind} />}
               {done && score !== null && (

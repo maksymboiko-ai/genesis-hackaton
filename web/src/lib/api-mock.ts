@@ -25,8 +25,8 @@ import {
 } from '@/contracts/api'
 import type { ApiError } from '@/contracts/api'
 import { MOCK_LESSONS } from './api-mock-lessons'
+import { gradeSubjectFor } from '@/contracts/subjects'
 import { subjectKey } from './subjects'
-import type { SubjectKey } from './subjects'
 
 type StoredChild = Child & { notes: string }
 type StoredBook = Book & { readyAt: number }
@@ -65,7 +65,9 @@ const LESSON_MS = 2000
 const BOOK_MS = 3000
 const REPLAN_MS = 3000
 
-const OUTLINES: Record<SubjectKey, { subject: string; title: string; steps: { title: string; objective: string; skill: string }[] }> = {
+type MockOutline = { subject: string; title: string; steps: { title: string; objective: string; skill: string }[] }
+
+const OUTLINES: Record<'math' | 'read' | 'sci', MockOutline> = {
   math: {
     subject: 'algebra',
     title: 'Two-step equations',
@@ -103,6 +105,22 @@ const OUTLINES: Record<SubjectKey, { subject: string; title: string; steps: { ti
       { title: 'From cells to body systems', objective: 'Connect cells, tissues, organs and systems.', skill: 'levels-of-organization' },
     ],
   },
+}
+
+// Core subjects get a full outline; the rest a short one from the topics
+// their blurb names.
+function outlineFor(name: string, family: string, blurb: string): MockOutline {
+  if (family === 'math' || family === 'read' || family === 'sci') return OUTLINES[family]
+  const topics = blurb.split(/,\s*/)
+  return {
+    subject: name,
+    title: `${name} basics`,
+    steps: topics.map((topic) => ({
+      title: topic.charAt(0).toUpperCase() + topic.slice(1),
+      objective: `Explain the key ideas of ${topic.toLowerCase()}.`,
+      skill: topic.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    })),
+  }
 }
 
 class MockError extends Error {
@@ -190,7 +208,8 @@ function newLesson(
 function buildContent(lesson: StoredLesson): LessonContent {
   const text = `${lesson.title} ${lesson.objective} ${lesson.skills.join(' ')}`
   const bySkill = MOCK_LESSONS.find((item) => lesson.skills.includes(item.skill))
-  const pool = MOCK_LESSONS.filter((item) => item.subject === subjectKey(text))
+  const family = MOCK_LESSONS.filter((item) => item.subject === subjectKey(text))
+  const pool = family.length ? family : MOCK_LESSONS
   const source = bySkill ?? pool[lesson.position % pool.length]
   const skill = lesson.skills[0] ?? source.skill
   const extra = source.blocks ?? []
@@ -365,17 +384,18 @@ function parseBody<T>(schema: { safeParse: (value: unknown) => { success: boolea
 
 async function createCurriculum(db: Db, raw: unknown) {
   const body = parseBody<CreateCurriculumRequest>(CreateCurriculumRequest, raw)
-  find(db.children, body.childId, 'Child')
+  const child = find(db.children, body.childId, 'Child')
   await delay(OUTLINE_MS)
 
   const topic = body.prompt.trim().replace(/\s+/g, ' ')
-  const outline = OUTLINES[subjectKey(body.prompt)]
+  const subject = gradeSubjectFor(child.gradeLevel, body.subject ?? body.prompt)
+  const outline = outlineFor(subject.name, subject.family, subject.blurb)
   const curriculum: StoredCurriculum = {
     id: id(),
     childId: body.childId,
     bookId: body.bookId,
     prompt: body.prompt,
-    subject: outline.subject,
+    subject: subject.name,
     title: topic.split(' ').length <= 5 ? topic.charAt(0).toUpperCase() + topic.slice(1) : outline.title,
     replanStatus: 'idle',
     lastReplanAt: 0,

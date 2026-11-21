@@ -112,7 +112,7 @@ export const aiService: AiService = {
         return {
           kind: "outline",
           outline: {
-            subject: nonEmpty(draft.subject, "subject").toLowerCase(),
+            subject: nonEmpty(draft.subject, "subject"),
             title: nonEmpty(draft.title, "title"),
             lessons: checkLessonOutlines(draft.lessons).map((lesson, index) => ({
               ...lesson,

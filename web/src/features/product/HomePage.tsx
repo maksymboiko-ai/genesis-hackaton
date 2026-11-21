@@ -12,8 +12,7 @@ import { SubjectIcon, SubjectTile } from '@/components/SubjectTile'
 import type { Child, Curriculum } from '@/contracts/domain'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
-import { SUBJECTS, SUBJECT_KEYS, subjectClass, subjectKey, subjectLabel } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { SUBJECTS, gradePopular, subjectClass, subjectKey, subjectLabel } from '@/lib/subjects'
 import { streakOf } from '@/lib/streak'
 import type { MascotPose } from '@/components/Mascot'
 import { useResource } from '@/lib/useResource'
@@ -105,16 +104,16 @@ function Skeleton({ tab }: { tab: Tab }) {
   )
 }
 
-function Building({ subject }: { subject: SubjectKey }) {
+function Building({ subject }: { subject: string }) {
   return (
     <div
-      className={`a-drop flex items-center gap-3.5 rounded-[22px] bg-s-tint p-[18px] ${SUBJECTS[subject].className}`}
+      className={`a-drop flex items-center gap-3.5 rounded-[22px] bg-s-tint p-[18px] ${subjectClass(subject)}`}
       role="status"
       aria-live="polite"
     >
-      <SubjectTile subject={subject} size={48} className="a-pulse" />
+      <SubjectTile subject={subjectKey(subject)} size={48} className="a-pulse" />
       <div className="flex flex-1 flex-col gap-1.5">
-        <p className="text-base leading-snug font-bold">Building a {SUBJECTS[subject].label} plan…</p>
+        <p className="text-base leading-snug font-bold">Building the {subjectLabel(subject)} plan…</p>
         <div className="bar build-bar" style={{ height: 6, background: '#fff' }}>
           <i />
         </div>
@@ -191,7 +190,7 @@ function LessonsTab({
 }: {
   child: Child
   plans: Curriculum[]
-  building: SubjectKey | null
+  building: string | null
   freshId: string | null
   onNewPlan: () => void
 }) {
@@ -202,9 +201,9 @@ function LessonsTab({
     return (
       <div className="grid gap-[22px] lg:grid-cols-2 lg:items-center lg:gap-10 lg:pt-4">
         <div className="stagger grid grid-cols-3 gap-2.5 md:gap-4 lg:order-2" aria-hidden="true">
-          {SUBJECT_KEYS.map((key) => (
-            <span key={key} className={`tile aspect-square w-full ${SUBJECTS[key].className}`} style={{ borderRadius: 26 }}>
-              <SubjectIcon subject={key} size={40} />
+          {gradePopular(child.gradeLevel).map(({ name, family }) => (
+            <span key={name} className={`tile aspect-square w-full ${SUBJECTS[family].className}`} style={{ borderRadius: 26 }}>
+              <SubjectIcon subject={family} size={40} />
             </span>
           ))}
         </div>
@@ -358,17 +357,17 @@ function ParentsTab({
 }: {
   child: Child
   plans: Curriculum[]
-  building: SubjectKey | null
+  building: string | null
   freshId: string | null
   onNewPlan: () => void
-  onPickSubject: (subject: SubjectKey) => void
+  onPickSubject: (subject: string) => void
 }) {
   const changes = planChanges(plans)
   const average = averageScore(plans)
   const streak = streakOf(plans)
 
   if (plans.length === 0 && !building) {
-    return <FirstPlan name={child.name} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
+    return <FirstPlan name={child.name} gradeLevel={child.gradeLevel} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
   }
 
   return (
@@ -426,7 +425,7 @@ export function HomePage() {
   const [tab, setTab] = useState<Tab>(readTab)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [draft, setDraft] = useState<PlanDraft>(EMPTY_DRAFT)
-  const [building, setBuilding] = useState<SubjectKey | null>(null)
+  const [building, setBuilding] = useState<string | null>(null)
   const [buildError, setBuildError] = useState('')
   const [freshId, setFreshId] = useState<string | null>(null)
 
@@ -450,10 +449,12 @@ export function HomePage() {
 
   function openDialog() {
     setBuildError('')
+    // No subject picked yet: start on the grade's math course.
+    if (child) setDraft((current) => (current.subject ? current : { ...current, subject: gradePopular(child.gradeLevel)[1].name }))
     setDialogOpen(true)
   }
 
-  function openForSubject(subject: SubjectKey) {
+  function openForSubject(subject: string) {
     setDraft({ ...EMPTY_DRAFT, subject })
     openDialog()
   }
@@ -468,7 +469,8 @@ export function HomePage() {
     try {
       const result = await api.createCurriculum({
         childId,
-        prompt: subjectKey(goal) === current.subject ? goal : `${goal} (${SUBJECTS[current.subject].label})`,
+        prompt: goal,
+        subject: current.subject || null,
         bookId: current.bookId,
         clarifications: current.questions.map((question, at) => ({
           question,
@@ -535,6 +537,7 @@ export function HomePage() {
       {dialogOpen && child && (
         <NewPlanDialog
           childName={child.name}
+          gradeLevel={child.gradeLevel}
           draft={draft}
           error={buildError}
           onChange={setDraft}

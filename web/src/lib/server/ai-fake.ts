@@ -158,7 +158,7 @@ export const fakeAi: AiService = {
     return {
       kind: "outline",
       outline: {
-        subject: "General",
+        subject: input.subject ?? input.subjects?.[0] ?? "General",
         title: input.prompt.trim().slice(0, 60),
         lessons: OUTLINE_STEPS.map((step, i) => ({
           title: sections.length ? `${step.title}: ${sections[i % sections.length].title}` : step.title,

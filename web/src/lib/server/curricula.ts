@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { OutlineLesson, OutlineOutput } from "@/contracts/ai";
 import type { CreateCurriculumRequest, CreateCurriculumResponse } from "@/contracts/api";
+import { findGradeSubject, gradeSubjectFor, subjectsForGrade } from "@/contracts/subjects";
 import {
   BookSection,
   MAX_CLARIFYING_QUESTIONS,
@@ -103,7 +104,9 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
   if (!prompt) throw badRequest("Invalid fields: prompt.");
   const clarifications = cleanClarifications(body.clarifications);
 
-  await ownedChild(user, body.childId);
+  const child = await ownedChild(user, body.childId);
+  const picked = body.subject ? findGradeSubject(child.gradeLevel, body.subject) : null;
+  if (body.subject && !picked) throw badRequest(`Invalid fields: subject is not a grade ${child.gradeLevel} subject.`);
   const bookSections = await bookSectionsFor(user, body.bookId);
   const learner = await buildLearnerProfile(body.childId);
 
@@ -113,6 +116,8 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
     learner,
     knownSkills: knownSkillsOf(learner),
     bookSections,
+    subjects: subjectsForGrade(child.gradeLevel).map((subject) => subject.name),
+    subject: picked?.name ?? null,
   });
 
   if (result.kind === "questions") {
@@ -133,7 +138,8 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
     childId: body.childId,
     bookId: body.bookId,
     prompt,
-    subject: outline.subject,
+    // The model may drift from the list: map it back onto the grade.
+    subject: picked?.name ?? gradeSubjectFor(child.gradeLevel, outline.subject).name,
     title: outline.title,
     lessons: outline.lessons,
   });

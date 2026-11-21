@@ -125,6 +125,9 @@ export const CreateCurriculumRequest = z.object({
   bookId: Id.nullable(),
   // [] on the first call.
   clarifications: z.array(Clarification).max(MAX_CLARIFYING_QUESTIONS),
+  // One of the child's grade subjects (contracts/subjects.ts), or null to
+  // let the plan pick the grade subject the goal is about.
+  subject: z.string().trim().min(1).max(80).nullish(),
 });
 export type CreateCurriculumRequest = z.infer<typeof CreateCurriculumRequest>;
 export const CreateCurriculumResponse = z.discriminatedUnion("status", [

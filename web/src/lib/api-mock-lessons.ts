@@ -1,10 +1,9 @@
 import type { LessonBlock } from '@/contracts/domain'
-import type { SubjectKey } from './subjects'
 
 type MockQuestion = { prompt: string; choices: [string, string, string, string]; correct: number; why: string }
 
 export type MockLesson = {
-  subject: SubjectKey
+  subject: 'math' | 'read' | 'sci'
   skill: string
   hook: string
   rule: string

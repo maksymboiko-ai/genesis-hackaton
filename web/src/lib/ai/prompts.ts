@@ -114,6 +114,14 @@ function join(parts: string[]): string {
   return parts.filter(Boolean).join("\n\n");
 }
 
+// The subject is always one of the learner's grade subjects, by its exact
+// name, so plans and mastery use the name the child sees at school.
+function subjectRule(input: GenerateOutlineInput): string {
+  if (input.subject) return `The subject is "${input.subject}": set subject to exactly that.`;
+  if (!input.subjects?.length) return "The subject is the school subject the goal is about, in title case, e.g. \"Algebra I\".";
+  return `Set subject to exactly one of the learner's grade subjects, the one the goal is about: ${input.subjects.map((name) => `"${name}"`).join(", ")}.`;
+}
+
 export function outlinePrompt(input: GenerateOutlineInput): Prompt {
   const answered = input.clarifications.length > 0;
   const clarifyRule = answered
@@ -135,7 +143,7 @@ export function outlinePrompt(input: GenerateOutlineInput): Prompt {
       "Adapt to the learner. Where mastery of a related skill is low, start with prerequisites, take smaller steps and plan more practice. Where it is high, skip the basics and go deeper. Fit the grade level.",
       SKILL_RULE,
       clarifyRule,
-      "The subject is one or two lowercase words, e.g. \"algebra\" or \"biology\". Reuse a subject from the learner's mastery list when it is the same one.",
+      subjectRule(input),
       STYLE_RULE,
     ]),
     user: join([

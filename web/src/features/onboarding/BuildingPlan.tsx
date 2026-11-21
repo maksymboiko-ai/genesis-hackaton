@@ -3,8 +3,8 @@
 import { Check } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Mascot } from '@/components/Mascot'
-import { SUBJECTS } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { findGradeSubject } from '@/contracts/subjects'
+import { SUBJECTS, subjectClass, subjectKey } from '@/lib/subjects'
 
 const STAGES = ['Reading the goal', 'Matching the grade level', 'Ordering the lessons', 'Writing the first lesson']
 const STAGE_MS = 900
@@ -20,7 +20,8 @@ export function BuildingPlan({
   onRevealed,
 }: {
   name: string
-  subject: SubjectKey
+  // A grade subject's name, or the goal text when no subject was picked.
+  subject: string
   gradeLevel: number | null
   format?: string
   titles: string[] | null
@@ -48,14 +49,16 @@ export function BuildingPlan({
   const rows = titles
     ? titles.map((title, at) => ({ label: title, state: at < shown ? 'done' : at === shown ? 'active' : 'todo' }))
     : STAGES.map((label, at) => ({ label, state: at < stage ? 'done' : at === stage ? 'active' : 'todo' }))
+  const known = gradeLevel ? findGradeSubject(gradeLevel, subject) : null
+  const label = known ? known.name : SUBJECTS[subjectKey(subject)].short.toLowerCase()
   const details = [gradeLevel && `Grade ${gradeLevel}`, format].filter(Boolean).join(' · ')
 
   return (
-    <div className={`${SUBJECTS[subject].className} a-fade mx-auto flex min-h-0 w-full max-w-[624px] flex-1 flex-col items-center gap-5 overflow-y-auto px-6 pt-[12dvh] md:px-8`}>
+    <div className={`${subjectClass(subject)} a-fade mx-auto flex min-h-0 w-full max-w-[624px] flex-1 flex-col items-center gap-5 overflow-y-auto px-6 pt-[12dvh] md:px-8`}>
       <Mascot key={titles ? 'ready' : 'working'} pose={titles ? 'cheer' : 'laptop'} size={184} className={titles ? 'a-pop' : 'a-pulse'} />
       <div className="flex flex-col gap-2 text-center">
         <h1 className="q" aria-live="polite">
-          {titles ? `${name}’s plan is ready` : `Building ${name}’s ${SUBJECTS[subject].short.toLowerCase()} plan…`}
+          {titles ? `${name}’s plan is ready` : `Building ${name}’s ${label} plan…`}
         </h1>
         {details && <p className="sub">{details}</p>}
       </div>

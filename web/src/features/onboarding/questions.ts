@@ -1,11 +1,12 @@
-import type { SubjectKey } from '@/lib/subjects'
+import { findGradeSubject, subjectsForGrade } from '@/contracts/subjects'
 
 export type Option = { value: string; label: string }
 
 export type Answers = {
   name: string
   gradeLevel: number | null
-  subjects: SubjectKey[]
+  // Grade subjects by their school name.
+  subjects: string[]
   pace: string | null
   format: string | null
   obstacles: string[]
@@ -46,8 +47,6 @@ export const GRADES = Array.from({ length: 12 }, (_, index) => index + 1)
 
 export const MAX_OBSTACLES = 2
 export const GOAL_MAX = 2000
-
-export const COMING_SOON = ['History', 'Spanish', 'Geometry', 'Chemistry']
 
 export const PACE: (Option & { level: number })[] = [
   { value: 'ahead', label: 'Ahead and often bored', level: 4 },
@@ -140,7 +139,8 @@ export function isAnswered(id: QuestionId, answers: Answers) {
   }
 }
 
-const STARTERS: Record<SubjectKey, string[][]> = {
+// Hand-picked goals for each grade's core English, math and science course.
+const STARTERS: Record<'math' | 'read' | 'sci', string[][]> = {
   math: [
     ['Counting to 100', 'Adding within 20', 'Shapes and patterns'],
     ['Two-digit addition', 'Skip counting', 'Telling time'],
@@ -185,9 +185,23 @@ const STARTERS: Record<SubjectKey, string[][]> = {
   ],
 }
 
-export function goalStarters(gradeLevel: number | null, subjects: SubjectKey[]) {
-  const row = (gradeLevel ?? 6) - 1
-  const picked: SubjectKey[] = subjects.length ? subjects : ['math']
-  if (picked.length === 1) return STARTERS[picked[0]][row].map((label) => ({ subject: picked[0], label }))
-  return picked.map((subject) => ({ subject, label: STARTERS[subject][row][0] }))
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+// Goals for one subject: the hand-picked ones for a core course, else the
+// topics its blurb names ("Supply and demand, markets, money").
+function startersFor(grade: number, name: string): string[] {
+  const subjects = subjectsForGrade(grade)
+  const subject = findGradeSubject(grade, name) ?? subjects[0]
+  const core = subjects.findIndex((item) => item.family === subject.family) === subjects.indexOf(subject)
+  if (core && (subject.family === 'math' || subject.family === 'read' || subject.family === 'sci')) {
+    return STARTERS[subject.family][grade - 1]
+  }
+  return subject.blurb.split(/,\s*/).map(cap)
+}
+
+export function goalStarters(gradeLevel: number | null, subjects: string[]) {
+  const grade = gradeLevel ?? 6
+  const picked = subjects.length ? subjects : [subjectsForGrade(grade)[1].name]
+  if (picked.length === 1) return startersFor(grade, picked[0]).map((label) => ({ subject: picked[0], label }))
+  return picked.slice(0, 4).map((subject) => ({ subject, label: startersFor(grade, subject)[0] }))
 }

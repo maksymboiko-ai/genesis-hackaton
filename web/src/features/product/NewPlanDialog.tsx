@@ -6,20 +6,20 @@ import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import { Button } from '@/components/Button'
 import type { ListBooksResponse } from '@/contracts/api'
 import { api } from '@/lib/api'
-import { SUBJECTS, SUBJECT_KEYS } from '@/lib/subjects'
-import type { SubjectKey } from '@/lib/subjects'
+import { SUBJECTS, gradeSubjects } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import './product.css'
 
 export type PlanDraft = {
-  subject: SubjectKey
+  // A grade subject's name; '' until the dialog picks one.
+  subject: string
   goal: string
   bookId: string | null
   questions: string[]
   answers: string[]
 }
 
-export const EMPTY_DRAFT: PlanDraft = { subject: 'math', goal: '', bookId: null, questions: [], answers: [] }
+export const EMPTY_DRAFT: PlanDraft = { subject: '', goal: '', bookId: null, questions: [], answers: [] }
 
 const GOAL_MAX = 1900
 const hasProcessing = (data: ListBooksResponse) => data.books.some((book) => book.status === 'processing')
@@ -118,6 +118,7 @@ function Books({ bookId, onPick }: { bookId: string | null; onPick: (bookId: str
 
 export function NewPlanDialog({
   childName,
+  gradeLevel,
   draft,
   error,
   onChange,
@@ -125,6 +126,7 @@ export function NewPlanDialog({
   onClose,
 }: {
   childName: string
+  gradeLevel: number
   draft: PlanDraft
   error: string
   onChange: (draft: PlanDraft) => void
@@ -235,23 +237,23 @@ export function NewPlanDialog({
           ) : (
             <div key="goal" className="flex flex-col gap-4">
               <div role="radiogroup" aria-label="Subject" className="flex flex-wrap gap-2">
-                {SUBJECT_KEYS.map((key) => {
-                  const on = draft.subject === key
+                {gradeSubjects(gradeLevel).map(({ name, family }) => {
+                  const on = draft.subject === name
                   return (
                     <button
-                      key={key}
+                      key={name}
                       type="button"
                       role="radio"
                       aria-checked={on}
-                      className={`chip ${SUBJECTS[key].className}`}
+                      className={`chip ${SUBJECTS[family].className}`}
                       style={
                         on
                           ? { background: 'var(--s)', color: '#fff' }
                           : { background: 'var(--surface-2)', color: 'var(--text)' }
                       }
-                      onClick={() => onChange({ ...draft, subject: key })}
+                      onClick={() => onChange({ ...draft, subject: name })}
                     >
-                      {SUBJECTS[key].label}
+                      {name}
                     </button>
                   )
                 })}
