@@ -1,0 +1,212 @@
+# Architecture
+
+A children's learning app. A parent or child describes a goal ("my child got a B in algebra"), and the app builds a curriculum that repairs itself as the child learns, adapts to the child across subjects, and can ground its lessons in an uploaded textbook.
+
+Three people build it: **Frontend**, **Backend** and **AI**. This document and the files in [contracts/](contracts/) define where one person's work ends and the next begins. If something you need is not in a contract, change the contract first (see [Changing a contract](#changing-a-contract)).
+
+## Stack
+
+| Layer | Choice |
+|---|---|
+| App | Next.js (App Router, TypeScript), one repo, deployed on Vercel |
+| Database | Supabase: Postgres, pgvector, file storage |
+| Models | OpenRouter, called through its OpenAI-compatible API; the model for each task is configurable |
+| Embeddings | `openai/text-embedding-3-small` through OpenRouter's embeddings endpoint |
+| Validation | Zod, used for API bodies, model outputs and shared types |
+
+## System
+
+```mermaid
+flowchart LR
+  subgraph FE["Frontend (owner: Frontend)"]
+    UI["Pages and components<br/>app/, components/"]
+    Client["Typed API client<br/>lib/api-client.ts"]
+  end
+
+  subgraph BE["Backend (owner: Backend)"]
+    Routes["Route handlers<br/>app/api/"]
+    Services["Curriculum, grading, replan trigger,<br/>mastery, book storage and retrieval<br/>lib/server/"]
+  end
+
+  subgraph AI["AI module (owner: AI)"]
+    AiSvc["AiService<br/>lib/ai/"]
+    Evals["Evals<br/>evals/"]
+  end
+
+  DB[("Supabase<br/>Postgres + pgvector + storage")]
+  OR["OpenRouter"]
+
+  UI --> Client
+  Client -- "contracts/api.ts" --> Routes
+  Routes --> Services
+  Services -- "contracts/ai.ts" --> AiSvc
+  Services -- "supabase/migrations" --> DB
+  AiSvc --> OR
+  Evals --> AiSvc
+```
+
+There are three boundaries, and each has one contract file:
+
+| Boundary | Contract | What it fixes |
+|---|---|---|
+| Frontend to Backend | [contracts/api.ts](contracts/api.ts) | Every endpoint's request and response |
+| Backend to AI | [contracts/ai.ts](contracts/ai.ts) | The `AiService` interface and the shapes models must produce |
+| Backend to Database | [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql) | Tables, columns, allowed values |
+
+[contracts/domain.ts](contracts/domain.ts) holds the vocabulary all three share: entity shapes, enum values and the tuning constants.
+
+## Ownership
+
+| | Frontend | Backend | AI |
+|---|---|---|---|
+| Owns | `app/` (except `app/api/`), `components/`, `lib/api-client.ts` | `app/api/`, `lib/server/`, `supabase/` | `lib/ai/`, `evals/` |
+| Builds against | `contracts/api.ts` | all three contracts | `contracts/ai.ts` |
+| Never touches | the database, `lib/ai/` | prompts, model choice | the database, HTTP routes |
+
+Rules that keep the parts fitting together:
+
+1. **The browser only talks to `/api`.** No Supabase client in frontend code.
+2. **The AI module is pure.** It receives everything as arguments and returns validated objects. It does not read or write the database. This is what lets evals run the production code path unchanged.
+3. **The backend never writes a prompt and never parses raw model text.** It calls `AiService` and gets typed objects back.
+4. **Types come from the contracts.** Nobody redeclares a `Lesson` or a `Question` locally; import or derive it.
+5. **Code decides when, models decide what.** Grading, the replan trigger, lesson ordering and mastery arithmetic are plain code in the backend. Models write outlines, lessons, diagnoses and notes.
+
+### Working in parallel from day one
+
+- **Frontend** builds against mock responses that satisfy the schemas in `contracts/api.ts`.
+- **Backend** builds against a fake `AiService` that returns canned objects.
+- **AI** builds and evaluates `lib/ai/` with fixture inputs, with no backend running.
+
+Integration then means swapping the mock and the fake for the real thing.
+
+## Data model
+
+Defined in full in [supabase/migrations/0001_init.sql](supabase/migrations/0001_init.sql).
+
+| Table | Purpose |
+|---|---|
+| `child` | Name, grade level, and free-text learner notes |
+| `curriculum` | One goal for one child; subject, title, replan state |
+| `lesson` | One row per lesson, ordered by `position`; outline fields plus generated `content` |
+| `attempt` | One quiz submission, with per-question results |
+| `skill_mastery` | A 0 to 1 score per child, subject and skill |
+| `replan_event` | A record of each self-healing change, for display |
+| `book`, `book_chunk` | Uploaded textbooks and their embedded chunks |
+| `llm_call` | Model, latency and token counts for every model call |
+
+Two ideas carry the design:
+
+- **A curriculum is an ordered list of lesson rows.** Self-healing inserts and appends rows; it never regenerates the whole curriculum.
+- **Skills are the common key.** Each lesson lists the skills it teaches, each quiz question names one skill, and mastery is tracked per skill. A wrong answer therefore points at a specific skill.
+
+A lesson has a `kind`:
+
+| Kind | Meaning |
+|---|---|
+| `core` | Part of the original outline |
+| `remedial` | Inserted to teach a skill the child is missing |
+| `retry` | A failed lesson scheduled again, with fresh content |
+| `extension` | Appended because the child is excelling |
+
+The current lesson is the one with the lowest `position` that has no `completed_at`. A lesson is completed by any attempt, whatever the score: a poor score is handled by replanning, not by blocking.
+
+## Flows
+
+### Create a curriculum
+
+1. Frontend sends `POST /api/curricula` with the child, the prompt and an optional book.
+2. Backend builds the `LearnerProfile` from `child.notes` and `skill_mastery`. If there is a book, it embeds the prompt and fetches the nearest chunks.
+3. Backend calls `generateOutline`. The model returns a subject, a title and lesson outlines (title, objective, skills). No lesson bodies.
+4. Backend stores the curriculum and its lessons with `content_status = 'pending'`, responds, and starts generating the first lesson in the background.
+
+### Open a lesson
+
+1. Frontend sends `GET /api/lessons/:id` and polls until `contentStatus` is `ready`.
+2. If the content is `pending`, the backend marks it `generating`, fetches book chunks for the lesson's objective, calls `generateLesson` and stores the result.
+3. When a lesson becomes ready, the backend starts generating the next one, so the child rarely waits.
+4. Responses never include `correctIndex` or `explanation`.
+
+### Submit a quiz
+
+1. Frontend sends `POST /api/lessons/:id/attempts`.
+2. Backend grades in code against the stored answers, stores the attempt, marks the lesson completed and updates `skill_mastery` for each skill in the quiz.
+3. Backend applies the replan rule (below) and responds immediately with results, explanations and `replanTriggered`.
+4. In the background it refreshes the learner notes and, if triggered, runs the replan.
+
+### Self-healing (replan)
+
+**Rule.** Take the attempts made since the last replan. Once there are 3, average their scores:
+
+- below 0.6: `struggling`
+- 0.9 or above: `excelling`
+- otherwise: no change
+
+**When struggling:**
+
+1. Backend sets `replan_status = 'running'` and calls `replan` with the recent attempts (including each wrong answer and its skill) and the remaining outline.
+2. The model returns a diagnosis (the mistakes made and the skills missing) and new remedial lesson outlines.
+3. Backend inserts, directly after the current position: the remedial lessons, then a `retry` copy of each failed lesson. It renumbers the lessons after them.
+4. Backend writes a `replan_event`, sets `last_replan_at` and returns `replan_status` to `idle`.
+
+**When excelling:** the same, except the model returns `extension` lessons and the backend appends them at the end.
+
+The frontend polls `GET /api/curricula/:id` while `replanStatus` is `running`, then shows the new lessons and the diagnosis from the latest `replanEvent`.
+
+### Evolution
+
+After each attempt, for each skill in the quiz:
+
+```
+mastery = 0.7 * mastery + 0.3 * (share of that skill's questions answered correctly)
+```
+
+A skill starts at 0.5. The AI module also rewrites `child.notes`, a short description of how the child learns. Both go into every `generateOutline`, `generateLesson` and `replan` call as the `LearnerProfile`, across all subjects. A child who aced biology and struggled in algebra therefore gets a deeper biology curriculum and a gentler algebra one next time.
+
+To stop skill names drifting ("linear-equations" and "solving-linear-equations"), the backend passes the child's existing slugs as `knownSkills` and the prompts tell the model to reuse them.
+
+### Textbook grounding (RAG)
+
+1. Frontend uploads a PDF with `POST /api/books`. Backend stores the file and responds with `status: 'processing'`.
+2. In the background the backend extracts the text, then calls `chunkText` and `embed`, and stores the chunks.
+3. At generation time the backend embeds the query (the prompt, or a lesson's title and objective), calls the `match_book_chunks` database function and passes the text as `sourceChunks`.
+
+## Models and evals
+
+- All model calls go through one OpenRouter client in `lib/ai/`.
+- `lib/ai/models.ts` maps each task (`outline`, `lesson`, `replan`, `learner_notes`) to a default model. Every `AiService` function accepts a `model` override.
+- Structured output uses `response_format` with `type: "json_schema"` and `strict: true`, generated from the Zod schemas in `contracts/ai.ts`. Requests set `provider.require_parameters: true` so OpenRouter only routes to endpoints that support it.
+- Enforcement differs between providers, so every response is still parsed with Zod. On failure the function retries once, then throws.
+- Model-facing schemas stay plain (no optional fields, no length or range limits) so they work across providers. Counts and ranges are checked in code.
+- Evals in `evals/` call the same `AiService` functions over fixture inputs, once per candidate model, and compare schema pass rate, latency, token use and output quality. The `onCall` hook reports each call; in production the backend writes those records to `llm_call`.
+
+## Repository layout
+
+```
+app/                    pages                       Frontend
+app/api/                route handlers              Backend
+components/             UI components               Frontend
+lib/api-client.ts       typed fetch wrapper         Frontend
+lib/server/             services, database access   Backend
+lib/ai/                 AiService implementation    AI
+evals/                  eval scripts and fixtures   AI
+contracts/              shared contracts            everyone
+supabase/migrations/    database schema             Backend
+```
+
+## Changing a contract
+
+A change to anything in `contracts/` or `supabase/migrations/` goes in its own pull request, separate from feature work, and is approved by the owner on each side of the boundary it touches before anyone builds on it. Schema changes are new migration files; `0001_init.sql` is not edited once it has been applied to the shared database.
+
+## Out of scope for the MVP
+
+- **Accounts and login.** There is no auth. The app shows a child picker.
+- **Row-level security.** All database access is server-side with the service role key.
+- **Streaming lesson text.** Lessons are generated ahead of time and fetched by polling.
+- **Free-text answers.** Quizzes are multiple choice with 4 options, graded in code.
+- **Scanned textbooks.** Only PDFs with a text layer are supported.
+
+## Known risks
+
+- **Background work on Vercel.** Lesson generation, replans and book ingestion run after the response using Next.js `after()`. They are bound by the function's maximum duration, so a large book may not finish. If that happens, ingest books with a local script instead.
+- **Duplicate generation.** Two requests can both see a lesson as `pending`. The backend must claim the lesson with a conditional update (`pending` to `generating`) and only generate if the update changed a row.
+- **Stuck states.** If a background job dies, a lesson can stay `generating` or a curriculum `running`. The backend should treat either as failed after a timeout.
