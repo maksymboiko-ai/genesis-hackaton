@@ -462,6 +462,7 @@ export const CASES: EvalCase[] = [
       // "7.3 Percent of a Number" belongs to the chapter printed as "Chapter 7 ...".
       const wrongChapter = book.sections.filter((s) => {
         const number = /^(\d+)\.\d+/.exec(s.title.trim())?.[1];
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- `number` is digits only
         return number !== undefined && !new RegExp(`chapter ${number}\\b`, "i").test(s.chapter);
       });
       return failures({

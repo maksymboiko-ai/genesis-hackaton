@@ -19,7 +19,7 @@ export function errorResponse(err: unknown, req: Request): Response {
   const ref = crypto.randomUUID().slice(0, 8);
   // Detail goes to the server log only. Never log request bodies: they hold
   // children's names, notes and prompts.
-  console.error(`[api] ${ref} ${req.method} ${new URL(req.url).pathname}`, err);
+  console.error("[api] %s %s %s", ref, req.method, new URL(req.url).pathname, err);
   return NextResponse.json(errorBody("internal", `Something went wrong (ref ${ref}).`), {
     status: 500,
   });
