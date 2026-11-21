@@ -37,7 +37,7 @@ export function StatSchool({ headingRef, name, pace }: Props & { pace: string | 
               key={at}
               className="a-pop block aspect-square rounded-full"
               style={{
-                background: at < FILLED_DOTS ? DOT_COLORS[at % 3] : '#E8E9EE',
+                background: at < FILLED_DOTS ? DOT_COLORS[at % 3] : 'var(--track)',
                 animationDelay: `${at < FILLED_DOTS ? 200 + at * 22 : 0}ms`,
               }}
             />
@@ -71,7 +71,7 @@ export function StatAnxiety({ headingRef, name, obstacles }: Props & { obstacles
             <i
               key={at}
               className="a-rise block h-[88px] flex-1 rounded-[44px_44px_16px_16px] md:h-[180px] md:rounded-[90px_90px_24px_24px]"
-              style={{ background: at === 0 ? 'var(--read)' : '#E8E9EE', animationDelay: `${200 + at * 70}ms` }}
+              style={{ background: at === 0 ? 'var(--read)' : 'var(--track)', animationDelay: `${200 + at * 70}ms` }}
             />
           ))}
         </div>

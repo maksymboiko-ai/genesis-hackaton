@@ -83,7 +83,7 @@
 }
 
 .lesson-bar {
-  background: #fff;
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 @media (min-width: 768px) {
@@ -91,13 +91,13 @@
     position: sticky;
     top: 72px;
     z-index: 10;
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(236, 245, 239, 0.94);
     backdrop-filter: blur(8px);
   }
 }
 .lesson-bar .track {
   height: 4px;
-  background: #f0f1f4;
+  background: var(--track);
 }
 .lesson-bar .track i {
   display: block;
@@ -129,7 +129,7 @@
 
 .toc a {
   padding: 8px 12px;
-  border-left: 3px solid #e8e9ee;
+  border-left: 3px solid var(--track);
   font: 500 14px/1.35 var(--font);
   color: var(--muted);
   text-decoration: none;

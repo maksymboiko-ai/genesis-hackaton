@@ -49,7 +49,7 @@ function Tile({
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-svh flex-col lg:grid lg:min-h-dvh lg:grid-cols-2">
-      <section className="mx-auto flex w-full max-w-[560px] flex-col lg:mx-0 lg:max-w-none lg:bg-[#FAFAFC] lg:px-[72px] lg:py-12">
+      <section className="mx-auto flex w-full max-w-[560px] flex-col lg:mx-0 lg:max-w-none lg:bg-[#D9EADE] lg:px-[72px] lg:py-12">
         <div className="px-6 pt-7 lg:p-0">
           <Wordmark />
         </div>

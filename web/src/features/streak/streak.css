@@ -4,7 +4,7 @@
   gap: 14px;
   padding: 16px 18px 14px 12px;
   border-radius: 26px;
-  background: linear-gradient(120deg, #f4f8ec, #e6f3e1);
+  background: #fff;
 }
 .streak-mascot {
   width: 84px;
@@ -36,7 +36,7 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #e9ebef;
+  background: var(--track);
   color: #fff;
 }
 .streak-day.done {
