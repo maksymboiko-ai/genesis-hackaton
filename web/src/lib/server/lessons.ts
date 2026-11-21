@@ -101,8 +101,10 @@ export async function generateLessonContent(lessonId: string): Promise<void> {
  */
 export async function startLessonGeneration(lessonId: string, retryNow = false): Promise<boolean> {
   const store = getStore();
+  // The store compares with "started before", so the bound sits just after
+  // now: a lesson that failed in this very millisecond can still be retried.
   const claimed = retryNow
-    ? await store.claimLesson(lessonId, ago(STALE_JOB_MS), new Date().toISOString())
+    ? await store.claimLesson(lessonId, ago(STALE_JOB_MS), ago(-1))
     : await claim(lessonId);
   if (!claimed) return false;
   runInBackground(`lesson ${lessonId}`, async () => {
