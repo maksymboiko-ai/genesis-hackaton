@@ -1,12 +1,13 @@
 @import 'tailwindcss';
 
 :root {
-  --bg: #ffffff;
+  --bg: #ecf5ef;
   --surface: #ffffff;
-  --surface-2: #f4f5f8;
+  --surface-2: #dfede4;
+  --track: #d6e3da;
   --text: #16181f;
   --muted: #555a68;
-  --border: #e3e5eb;
+  --border: #d3e0d7;
   --field: #8f94a3;
   --accent: #16181f;
   --accent-fg: #ffffff;
@@ -102,6 +103,7 @@
 
 html {
   color-scheme: light;
+  background: var(--bg);
   -webkit-text-size-adjust: 100%;
 }
 
@@ -270,7 +272,7 @@ body {
   transform: scale(0.98);
 }
 .btn:disabled {
-  background: #e8e9ee;
+  background: var(--track);
   color: #6b6f7c;
   cursor: not-allowed;
 }
@@ -505,7 +507,7 @@ button.chip:active {
   flex: 1;
   height: 6px;
   border-radius: 999px;
-  background: #e8e9ee;
+  background: var(--track);
   display: block;
   position: relative;
   overflow: hidden;
@@ -610,7 +612,7 @@ button.chip:active {
   left: 21px;
   width: 3px;
   border-radius: 2px;
-  background: #e3e5eb;
+  background: var(--track);
 }
 .row {
   position: relative;
@@ -753,7 +755,7 @@ button.cardx:hover {
 .bar {
   height: 8px;
   border-radius: 999px;
-  background: #e8e9ee;
+  background: var(--track);
   overflow: hidden;
   display: flex;
 }
@@ -969,7 +971,7 @@ button.cardx:hover {
   width: 28px;
   height: 6px;
   border-radius: 999px;
-  background: #e8e9ee;
+  background: var(--track);
   border: 0;
   padding: 0;
   transition: background-color 220ms var(--ease);
@@ -997,7 +999,7 @@ button.cardx:hover {
 .sk {
   display: block;
   border-radius: 8px;
-  background: linear-gradient(90deg, #f0f1f4 25%, #f7f8fa 50%, #f0f1f4 75%);
+  background: linear-gradient(90deg, #dbe8df 25%, #e6f0e9 50%, #dbe8df 75%);
   background-size: 200% 100%;
   animation: shimmer 1400ms linear infinite;
 }
@@ -1213,4 +1215,5 @@ button.cardx:hover {
   }
 }
 }
+
 

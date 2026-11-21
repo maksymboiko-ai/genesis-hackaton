@@ -292,7 +292,7 @@
   position: relative;
   height: 8px;
   border-radius: 999px;
-  background: #eef0f4;
+  background: var(--track);
   overflow: hidden;
 }
 .meter .fill {

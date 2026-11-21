@@ -126,7 +126,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
       <div className="mt-3 grid gap-6 pb-10 lg:mt-8 lg:grid-cols-[340px_minmax(0,640px)] lg:justify-center lg:gap-16">
         <aside className="a-rise flex flex-col gap-[18px] lg:sticky lg:top-24 lg:self-start">
           <div
-            className={`flex flex-col items-center gap-3.5 text-center ${perfect ? 'rounded-[26px] bg-[#f1f8ee] px-5 py-7' : 'py-2'}`}
+            className={`flex flex-col items-center gap-3.5 text-center ${perfect ? 'rounded-[26px] bg-white px-5 py-7' : 'py-2'}`}
           >
             <Mascot pose={right / total >= 0.8 ? 'thumbs-up' : 'curious'} size={172} className="streak-bounce" />
             <h1 ref={headingRef} tabIndex={-1} className="q outline-none" style={{ fontSize: 34 }}>
