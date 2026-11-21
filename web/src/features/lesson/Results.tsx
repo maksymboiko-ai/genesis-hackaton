@@ -2,6 +2,7 @@
 
 import { Mascot } from '@/components/Mascot'
 import { StreakMoment } from '@/features/streak/StreakMoment'
+import '@/features/streak/streak.css'
 import { Check, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
@@ -105,6 +106,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
   const nextNumber = curriculum && next ? curriculum.lessons.findIndex((lesson) => lesson.id === next.id) + 1 : 0
   const planHref = `/app/curricula/${curriculumId}`
   const good = result.replanTriggered === 'excelling'
+  const perfect = right === total
 
   return (
     <div className="mx-auto w-full max-w-[1044px]">
@@ -116,29 +118,27 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
 
       <div className="mt-3 grid gap-6 pb-10 lg:mt-8 lg:grid-cols-[340px_minmax(0,640px)] lg:justify-center lg:gap-16">
         <aside className="a-rise flex flex-col gap-[18px] lg:sticky lg:top-24 lg:self-start">
-          <div className="flex items-end justify-between gap-4">
-          <h1 ref={headingRef} tabIndex={-1} className="flex items-baseline gap-2.5 outline-none">
-            <span className="text-[80px] leading-none font-extrabold tracking-[-0.05em] lg:text-[96px]">{right}</span>
-            <span className="text-[26px] font-extrabold text-muted lg:text-[28px]">of {total}</span>
-            {lessonNumber && <span className="sr-only">, lesson {lessonNumber} done</span>}
-          </h1>
-            <Mascot
-              pose={right / total >= 0.8 ? 'thumbs-up' : 'curious'}
-              size={116}
-              className="a-pop"
-            />
+          <div
+            className={`flex flex-col items-center gap-3.5 text-center ${perfect ? 'rounded-[26px] bg-[#f1f8ee] px-5 py-7' : 'py-2'}`}
+          >
+            <Mascot pose={right / total >= 0.8 ? 'thumbs-up' : 'curious'} size={172} className="streak-bounce" />
+            <h1 ref={headingRef} tabIndex={-1} className="q outline-none" style={{ fontSize: 34 }}>
+              {right} of {total}
+              {perfect ? '!' : ''}
+              {lessonNumber && <span className="sr-only">, lesson {lessonNumber} done</span>}
+            </h1>
+            <p className="sub">{result.feedback.headline || headline(right, total)}</p>
+            {result.feedback.summary && <p className="sm">{result.feedback.summary}</p>}
+            <div className="scorebar flex w-full gap-1.5" aria-hidden="true">
+              {result.results.map((item, index) => (
+                <i
+                  key={item.questionId}
+                  className={item.correct ? 'bg-s' : 'bg-sun'}
+                  style={{ animationDelay: `${index * 80}ms` }}
+                />
+              ))}
+            </div>
           </div>
-          <div className="scorebar flex gap-1.5" aria-hidden="true">
-            {result.results.map((item, index) => (
-              <i
-                key={item.questionId}
-                className={item.correct ? 'bg-s' : 'bg-sun'}
-                style={{ animationDelay: `${index * 80}ms` }}
-              />
-            ))}
-          </div>
-          <p className="sub text-[18px]! text-text!">{result.feedback.headline || headline(right, total)}</p>
-          {result.feedback.summary && <p className="sm">{result.feedback.summary}</p>}
 
           {result.replanTriggered && (
             <div

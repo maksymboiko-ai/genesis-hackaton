@@ -51,9 +51,9 @@ export function BuildingPlan({
   const details = [gradeLevel && `Grade ${gradeLevel}`, format].filter(Boolean).join(' · ')
 
   return (
-    <div className={`${SUBJECTS[subject].className} a-fade mx-auto flex min-h-0 w-full max-w-[624px] flex-1 flex-col gap-5 overflow-y-auto px-6 pt-12 md:px-8 md:pt-14`}>
-      <Mascot key={titles ? 'ready' : 'working'} pose={titles ? 'cheer' : 'laptop'} size={136} className={titles ? 'a-pop' : 'a-pulse'} />
-      <div className="flex flex-col gap-2">
+    <div className={`${SUBJECTS[subject].className} a-fade mx-auto flex min-h-0 w-full max-w-[624px] flex-1 flex-col items-center gap-5 overflow-y-auto px-6 pt-[12dvh] md:px-8`}>
+      <Mascot key={titles ? 'ready' : 'working'} pose={titles ? 'cheer' : 'laptop'} size={184} className={titles ? 'a-pop' : 'a-pulse'} />
+      <div className="flex flex-col gap-2 text-center">
         <h1 className="q" aria-live="polite">
           {titles ? `${name}’s plan is ready` : `Building ${name}’s ${SUBJECTS[subject].short.toLowerCase()} plan…`}
         </h1>
@@ -79,7 +79,7 @@ export function BuildingPlan({
           </li>
         ))}
       </ol>
-      <p className="sm mt-auto pb-7">About 10 seconds. Each lesson ends with a short quiz.</p>
+      <p className="sm mt-auto pb-7 text-center">About 10 seconds. Each lesson ends with a short quiz.</p>
     </div>
   )
 }
