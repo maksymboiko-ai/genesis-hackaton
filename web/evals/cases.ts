@@ -122,7 +122,7 @@ const equationsLesson: LessonOutline = {
   skills: ["solving-one-step-equations", "inverse-operations"],
 };
 
-const strugglingAttempts: LessonAttemptSummary[] = [
+export const strugglingAttempts: LessonAttemptSummary[] = [
   {
     lesson: {
       title: "Adding and subtracting negative numbers",
@@ -159,7 +159,7 @@ const strugglingAttempts: LessonAttemptSummary[] = [
   },
 ];
 
-const excellingAttempts: LessonAttemptSummary[] = [
+export const excellingAttempts: LessonAttemptSummary[] = [
   { lesson: equationsLesson, score: 1, wrongAnswers: [] },
   {
     lesson: {
