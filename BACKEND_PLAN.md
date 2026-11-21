@@ -162,7 +162,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 
 | ID | Planned | Module | Status | Actual / gaps |
 |---|---|---|---|---|
-| F1 | children + profile | M1 | ❌ | — |
+| F1 | children + profile | M1 | ✅ | name trimmed, 1–100 chars, control chars stripped; profile never carries the name |
 | F2 | books + ingestion | M6 | ❌ | — |
 | F3 | create curriculum + clarification | M2 | ❌ | — |
 | F4 | list/get curricula | M2 | ❌ | — |
@@ -180,7 +180,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | Module | Build | Tests | Bug re-check | Ready |
 |---|---|---|---|---|
 | M0 Foundation | ✅ | ✅ 15 tests | ✅ | ✅ |
-| M1 Children | ❌ | ❌ | ❌ | ❌ |
+| M1 Children | ✅ | ✅ 6 tests | ✅ | ✅ |
 | M2 Curricula | ❌ | ❌ | ❌ | ❌ |
 | M3 Lessons | ❌ | ❌ | ❌ | ❌ |
 | M4 Attempts | ❌ | ❌ | ❌ | ❌ |
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 13:32 | M1 | Long names were silently truncated → now rejected with 400 above 100 chars | — |
 
 ---
 
