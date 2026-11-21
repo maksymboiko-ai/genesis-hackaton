@@ -2,6 +2,7 @@ import "server-only";
 import {
   EMBEDDING_DIMENSIONS,
   type AiService,
+  type AttemptFeedbackInput,
   type GenerateLessonInput,
   type GenerateOutlineInput,
   type PlannedLesson,
@@ -185,6 +186,16 @@ export const fakeAi: AiService = {
     const avg = scores.length ? scores.reduce((s, x) => s + x, 0) / scores.length : 0;
     return {
       notes: `Grade ${input.gradeLevel} learner. Recent average score ${Math.round(avg * 100)}%.`,
+    };
+  },
+
+  async writeAttemptFeedback(input: AttemptFeedbackInput) {
+    const misses = input.attempt.wrongAnswers.length;
+    return {
+      headline: misses ? "Good effort." : "All of them held up.",
+      summary: misses
+        ? `${label(input.attempt.wrongAnswers[0].skill)} is worth another look, below.`
+        : `You got every ${label(input.rightAnswers[0]?.skill ?? "question")} question.`,
     };
   },
 

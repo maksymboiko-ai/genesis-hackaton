@@ -41,6 +41,7 @@ const TASKS: Record<keyof AiService, LlmCallRecord["task"]> = {
   replan: "replan",
   updateLearnerNotes: "learner_notes",
   prepareBook: "book_map",
+  writeAttemptFeedback: "feedback",
   embed: "embed",
 };
 
@@ -79,6 +80,7 @@ export function getAi(): AiService {
     replan: wrap("replan"),
     updateLearnerNotes: wrap("updateLearnerNotes"),
     prepareBook: wrap("prepareBook"),
+    writeAttemptFeedback: wrap("writeAttemptFeedback"),
     embed: wrap("embed"),
   };
 }

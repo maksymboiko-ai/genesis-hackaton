@@ -486,7 +486,15 @@ function submitAttempt(db: Db, lessonId: string, raw: unknown) {
   }
 
   const next = lessonsOf(db, curriculum.id).find((candidate) => !candidate.completedAt)
-  return { attemptId: attempt.id, score, results, replanTriggered, nextLessonId: next?.id ?? null }
+  const right = results.filter((result) => result.correct).length
+  const misses = results.length - right
+  const feedback =
+    misses === 0
+      ? { headline: 'All of them held up.', summary: `${right} of ${results.length}. Nothing to look at again.` }
+      : score >= STRUGGLING_BELOW
+        ? { headline: 'Nice work.', summary: `${right} of ${results.length}. ${misses === 1 ? 'One' : misses} to look at again, below.` }
+        : { headline: "This one was tricky. That's useful to know.", summary: `${right} of ${results.length}. The notes below show where it slipped.` }
+  return { attemptId: attempt.id, score, results, feedback, replanTriggered, nextLessonId: next?.id ?? null }
 }
 
 async function route(db: Db, method: string, parts: string[], query: URLSearchParams, body: unknown) {

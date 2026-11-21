@@ -144,6 +144,10 @@ export const SubmitAttemptResponse = z.object({
   attemptId: Id,
   score: z.number().min(0).max(1),
   results: z.array(QuestionResult),
+  // Shown above the results, to the child. headline: a few words ("Nice. The
+  // sign is starting to stick."); summary: one or two sentences on what held
+  // up and what to look at again.
+  feedback: z.object({ headline: z.string(), summary: z.string() }),
   replanTriggered: ReplanTrigger.nullable(),
   nextLessonId: Id.nullable(),
 });

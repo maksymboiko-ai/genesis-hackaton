@@ -2,6 +2,7 @@
 // pure functions, validated return values, one retry on invalid output.
 import { randomUUID } from "node:crypto";
 import {
+  AttemptFeedbackOutput,
   BookMapOutput,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
@@ -22,6 +23,7 @@ import { chunkText } from "./chunk";
 import { callEmbeddings, callStructured, InvalidOutputError } from "./client";
 import { DEFAULT_MODELS } from "./models";
 import {
+  attemptFeedbackPrompt,
   bookMapPrompt,
   learnerNotesPrompt,
   lessonPrompt,
@@ -227,6 +229,22 @@ export const aiService: AiService = {
       schema: LearnerNotesOutput,
       onCall: options?.onCall,
       check: (output) => ({ notes: nonEmpty(output.notes, "notes") }),
+    });
+  },
+
+  writeAttemptFeedback(input, options) {
+    const prompt = attemptFeedbackPrompt(input);
+    return callStructured({
+      task: "feedback",
+      model: options?.model ?? DEFAULT_MODELS.feedback,
+      ...prompt,
+      schemaName: "attempt_feedback",
+      schema: AttemptFeedbackOutput,
+      onCall: options?.onCall,
+      check: (output) => ({
+        headline: nonEmpty(output.headline, "headline"),
+        summary: nonEmpty(output.summary, "summary"),
+      }),
     });
   },
 

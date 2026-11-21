@@ -175,6 +175,8 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F11 | claims, failure reset, stuck recovery | M3, M5 | ✅ | stale `generating`/`running` reclaimed after 3 min; `failed` lesson retried on open after a 60 s cooldown; failed replan releases to idle |
 | F13 | explicit lesson retry ("Try again") | M8 | ✅ | `POST /api/lessons/:id/retry` skips the 60 s cooldown; ready/generating lessons returned as they are; 5 burst, 2/min per IP; client method + mock route added |
 | F14 | lesson length (`estimatedMinutes`) | M8 | ✅ | model estimate per planned lesson (outline + replan prompts, 3–30 checked in `lib/ai`), bounded again in the backend with a computed fallback; replaced by a value computed from the content (reading speed by grade + 45 s per question) once ready; migration `0006` |
+| F15 | results feedback (headline + summary) | M8 | ✅ | new `AiService.writeAttemptFeedback` (task `feedback`, fast model) called while the attempt is submitted, 8 s timeout; plain message from the score on any failure or empty text; capped 120/400 chars; no names sent |
+| F16 | feedback per chosen answer, lesson reasons, child message | M8 | ✅ | from `feature/ai-functions` (`choiceFeedback`, `reason`, `childMessage`); results return the chosen choice's feedback; `choiceFeedback` never in lesson responses |
 | F12 | fake/real AiService switch | M0, M7 | ✅ | `AI_MODE=real` (default) calls `lib/ai` (merged from `feature/ai-functions`); `fake` for tests and keyless local runs; key checked only when a model is called |
 
 ### Modules
@@ -197,6 +199,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 14:55 | M8 | Screen review (approved designs) found 5 gaps: "Try again" blocked by the cooldown → retry endpoint; results summary → `writeAttemptFeedback` with fallback; per-answer explanation → `choiceFeedback` from the AI branch; lesson length → `estimatedMinutes`; parent notification → dropped for the demo | — |
 | 14:25 | Merge 2 | AI branch: `PublicQuestion` would have carried `choiceFeedback` (answer leak; also broke `GetLessonResponse`) → omitted in the contract; my `getAi()` wrapper dropped `this` (real `prepareBook` calls `this.embed`) → fixed; migrations renumbered after `0003_explanations.sql` | — |
 | 14:15 | M7 | Supabase `anon` role could read every table and call the write functions → `0005` (RLS on, no policies; execute revoked); `AI_MODE=real` without a key broke every route → key now checked per model call; security headers, `poweredByHeader: false` | No CSP yet (needs Frontend); deploy to Vercel not done; real model and real Supabase not exercised from here |
 | 14:00 | M6 | Upload rate limit confirmed by tests; `match_book_chunks` checked with section filter and order | Vercel 4.5 MB body limit on uploads; chunks inserted in batches, not one transaction (cleaned up on failure) |
@@ -219,15 +222,19 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **Failed lessons.** Not in the original plan: opening a `failed` lesson retries it, but only 60 s after the failed attempt.
 - **SQL tests.** `supabase/tests/0004_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 
+### M8: screen features (approved designs)
+
+Added after checking the approved screens (`Product — learning app identity & screens.html`): F13–F16 above. The "we'll let your parent know" line on the failed-lesson screen is dropped for the demo (no parent accounts).
+
 ### Verification at the end of M7
 
 | Check | Result |
 |---|---|
-| `npm test` (vitest, in-memory store, fake AI) | 76 passed |
+| `npm test` (vitest, in-memory store, fake AI) | 89 passed (after the screen features) |
 | SQL tests on Postgres 16 + pgvector (`supabase/tests/`) | all functions, atomicity and the RLS lockdown pass |
 | `npx tsc --noEmit`, `eslint` | clean |
 | `next build` | passes; every `/api/*` route is dynamic (ƒ) |
-| `node scripts/smoke.mjs` against `next start` (`STORE=memory AI_MODE=fake`) | 15/15: real `after()` jobs, clarification → curriculum → 3 lessons → replan → notes; PDF upload → `ready` |
+| `node scripts/smoke.mjs` against `next start` (`STORE=memory AI_MODE=fake`) | 19/19 (incl. feedback, estimated minutes, retry): real `after()` jobs, clarification → curriculum → 3 lessons → replan → notes; PDF upload → `ready` |
 | `npm audit --omit=dev` | 0 vulnerabilities |
 
 Not verified from here: the Supabase store against a real project (only type-checked; its SQL functions are tested directly) and real model calls (no key in this environment).

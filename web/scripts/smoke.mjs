@@ -45,11 +45,12 @@ const created = await api("POST", "/api/curricula", {
 });
 check(created.status === 201 && created.body.status === "created", "curriculum created after answers");
 const curriculum = created.body.curriculum;
+check(curriculum.lessons.every((l) => Number.isInteger(l.estimatedMinutes) && l.estimatedMinutes > 0), "every lesson has estimated minutes");
 
 async function doLesson(lessonId, correct) {
   const lesson = await poll(() => api("GET", `/api/lessons/${lessonId}`), (r) => ["ready", "failed"].includes(r.body.contentStatus));
   check(lesson.body.contentStatus === "ready", `lesson ${lessonId.slice(0, 8)} ready (background generation)`);
-  check(!JSON.stringify(lesson.body).includes("correctIndex"), "no answers in lesson response");
+  check(!/correctIndex|choiceFeedback|explanation/.test(JSON.stringify(lesson.body)), "no answers or feedback in lesson response");
   const answers = lesson.body.content.questions.map((q, i) => ({ questionId: q.id, chosenIndex: i < correct ? 0 : 3 }));
   return api("POST", `/api/lessons/${lessonId}/attempts`, { answers });
 }
@@ -57,8 +58,10 @@ async function doLesson(lessonId, correct) {
 // The fake puts the right answer at index n % 4 for question n, so
 // "chosenIndex 0" is right only for the first question: scores stay low.
 const ids = curriculum.lessons.map((l) => l.id);
-await doLesson(ids[0], 0);
 await doLesson(ids[1], 0);
+const first = await doLesson(ids[0], 0);
+check(typeof first.body.feedback?.headline === "string" && first.body.feedback.summary, "results carry feedback");
+check(first.body.results.every((r) => r.explanation), "every result has feedback for the chosen answer");
 const third = await doLesson(ids[2], 0);
 check(third.status === 201 && third.body.replanTriggered === "struggling", "third poor attempt triggers a replan");
 
@@ -69,6 +72,9 @@ check(after.body.replanEvents.length === 1, "replan event recorded");
 
 const profile = await poll(() => api("GET", `/api/children/${child.body.id}/profile`), (r) => r.body.notes !== "");
 check(profile.body.mastery.length > 0 && profile.body.notes !== "", "mastery and learner notes updated");
+
+const retried = await api("POST", `/api/lessons/${ids[0]}/retry`);
+check(retried.status === 200 && retried.body.contentStatus === "ready", "retry on a ready lesson returns it unchanged");
 
 const bad = await api("POST", "/api/children", { name: "x", gradeLevel: 99 });
 check(bad.status === 400 && bad.body.error.code === "bad_request", "validation error envelope");

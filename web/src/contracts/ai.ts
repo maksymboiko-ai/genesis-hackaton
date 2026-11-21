@@ -25,7 +25,7 @@ import {
 // One model call, reported through AiCallOptions.onCall. The backend writes
 // these to the llm_call table; evals collect them in memory.
 export type LlmCallRecord = {
-  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "embed";
+  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "feedback" | "embed";
   model: string;
   latencyMs: number;
   inputTokens: number | null;
@@ -153,6 +153,14 @@ export const ReplanOutput = z.object({
 });
 export type ReplanOutput = z.infer<typeof ReplanOutput>;
 
+// What the model says to the child right after a quiz: a short headline and
+// one or two sentences about this attempt (what held up, what to look at).
+export const AttemptFeedbackOutput = z.object({
+  headline: z.string(),
+  summary: z.string(),
+});
+export type AttemptFeedbackOutput = z.infer<typeof AttemptFeedbackOutput>;
+
 export const LearnerNotesOutput = z.object({
   notes: z.string(),
 });
@@ -221,6 +229,15 @@ export type PreparedBook = {
   }[];
 };
 
+export type AttemptFeedbackInput = {
+  gradeLevel: number;
+  subject: string;
+  // The attempt, with each wrong answer as text.
+  attempt: LessonAttemptSummary;
+  // The questions answered correctly, so the feedback can name what held up.
+  rightAnswers: { prompt: string; answer: string; skill: string }[];
+};
+
 export type UpdateLearnerNotesInput = {
   previousNotes: string;
   gradeLevel: number;
@@ -251,6 +268,13 @@ export interface AiService {
     input: UpdateLearnerNotesInput,
     options?: AiCallOptions,
   ): Promise<LearnerNotesOutput>;
+
+  // Feedback shown with the quiz results. The backend calls it while the
+  // attempt is submitted and falls back to a plain message on failure.
+  writeAttemptFeedback(
+    input: AttemptFeedbackInput,
+    options?: AiCallOptions,
+  ): Promise<AttemptFeedbackOutput>;
 
   // Book ingestion in one step: splits the text into chunks, maps the
   // book's sections and embeds every chunk. The backend stores the result.

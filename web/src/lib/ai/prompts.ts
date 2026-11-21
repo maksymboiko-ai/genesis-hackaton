@@ -1,6 +1,7 @@
 // Every prompt in the app. Each builder returns the system and user message
 // for one task; the output shape is enforced separately by the JSON schema.
 import type {
+  AttemptFeedbackInput,
   GenerateLessonInput,
   GenerateOutlineInput,
   LessonAttemptSummary,
@@ -214,6 +215,24 @@ export function replanPrompt(input: ReplanInput): Prompt {
       ),
       learnerSection(input.learner),
       section("Known skills", list(input.knownSkills)),
+    ]),
+  };
+}
+
+export function attemptFeedbackPrompt(input: AttemptFeedbackInput): Prompt {
+  const right = input.rightAnswers.map((r) => `[${r.skill}] "${r.prompt}" answered "${r.answer}"`);
+  return {
+    system: join([
+      "You write the message a school child sees right after finishing a quiz, above the per-question review.",
+      'Return a headline of at most 8 words ("Nice. The sign is starting to stick.") and a summary of 1 to 2 sentences, at most 35 words, addressed to the child ("You kept the sign right on every \"+\" question. One to look at again, below.").',
+      "Be specific: name what the right answers have in common and, if there were misses, the one pattern worth another look. Do not repeat the score as a number and do not explain the answers; the review below does that.",
+      "Be warm and honest at the child's grade level. Never use the words wrong, failed, bad or mistake; a miss is something worth another look. Do not overpraise a low score: say it was tricky and that it shows what to practise.",
+      STYLE_RULE,
+    ]),
+    user: join([
+      section("Learner", `Grade level: ${input.gradeLevel}\nSubject: ${input.subject}`),
+      attemptsSection([input.attempt]),
+      section("Right answers", list(right)),
     ]),
   };
 }
