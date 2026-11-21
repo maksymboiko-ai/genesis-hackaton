@@ -4,6 +4,8 @@ import { Check, ChevronLeft } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Button } from '@/components/Button'
+import { Mascot } from '@/components/Mascot'
+import type { MascotPose } from '@/components/Mascot'
 import { SubjectTile } from '@/components/SubjectTile'
 import { Wordmark } from '@/components/Wordmark'
 import type { Child } from '@/contracts/domain'
@@ -27,9 +29,18 @@ import {
   heading,
   isAnswered,
 } from './questions'
-import type { Answers } from './questions'
+import type { Answers, QuestionId } from './questions'
 
 const SEGMENT_COLORS = ['m', 'r', 's']
+
+const POSES: Partial<Record<QuestionId, MascotPose>> = {
+  name: 'curious',
+  grade: 'thumbs-up',
+  subjects: 'reading',
+  pace: 'curious',
+  format: 'idea',
+  goal: 'laptop',
+}
 
 function Mark() {
   return <Check size={14} strokeWidth={3.5} aria-hidden="true" />
@@ -166,6 +177,7 @@ export function ChildQuiz({
   const question = screen.kind === 'question' ? heading(screen.id, name) : null
   const wide = screen.kind === 'info'
   const starters = goalStarters(answers.gradeLevel, answers.subjects)
+  const pose = screen.kind === 'question' ? POSES[screen.id] : undefined
 
   if (building) {
     return (
@@ -422,12 +434,20 @@ export function ChildQuiz({
       }
     >
       <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        {pose && (
+          <Mascot key={pose} pose={pose} size={176} className="a-rise fixed right-12 bottom-10 hidden lg:block" />
+        )}
         <div
           key={index}
           className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-6 overflow-x-hidden px-6 pt-7 pb-1 max-md:overflow-y-auto max-md:overscroll-contain md:flex-none md:overflow-visible md:gap-7 md:px-8 md:pt-16 max-md:[&>*:first-child]:mt-auto ${column} ${
             direction === 'forward' ? 'a-step' : 'a-step-back'
           }`}
         >
+          {pose && (
+            <div className="grid min-h-0 flex-1 place-items-center overflow-hidden md:hidden">
+              <Mascot key={pose} pose={pose} size={140} className="a-pop h-auto max-h-full w-[156px] object-contain" />
+            </div>
+          )}
           {body}
           {error && (
             <p role="alert" className="a-fade rounded-[14px] bg-danger-soft px-4 py-3 text-sm font-bold text-danger">

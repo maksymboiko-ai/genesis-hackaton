@@ -7,7 +7,9 @@ import { Button } from '@/components/Button'
 import { Wordmark } from '@/components/Wordmark'
 import { APP_NAME } from '@/lib/config'
 import { signOutEverywhere } from '@/lib/auth'
+import { StreakPill } from '@/features/streak/StreakPill'
 import { ChildMenu } from './ChildMenu'
+import './product.css'
 
 export function ProductLayout({ children }: { children: ReactNode }) {
 
@@ -19,6 +21,7 @@ export function ProductLayout({ children }: { children: ReactNode }) {
             <Wordmark />
           </Link>
           <div className="flex items-center gap-2 md:gap-3">
+            <StreakPill />
             <ChildMenu />
             <div className="hidden md:block">
               <Button variant="ghost" size="sm" onClick={() => void signOutEverywhere()}>
