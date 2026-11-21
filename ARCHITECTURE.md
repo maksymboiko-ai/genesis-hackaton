@@ -204,7 +204,9 @@ Parents sign up and sign in through `/api/auth/*`; the backend calls Supabase Au
 
 ### Subscriptions
 
-"Start free trial" on the paywall sends `POST /api/subscription` with the chosen plan, and the backend stores the account's 7-day trial in `subscription`. An account has one trial. There is no billing provider yet, so no payment is taken and nothing sets `paid_at`; when one is added, its webhook is the one place that should.
+"Start free trial" on the paywall sends `POST /api/subscription` with the chosen plan, and the backend stores the account's 7-day trial in `subscription`. An account has one trial. There is no billing provider yet, so no payment is taken and nothing sets `paid_at`; when one is added, its webhook is the one place that should. The card form before the trial is a mock-up: what is typed into it stays in the browser and is never sent or stored.
+
+**Access.** An account with a running trial (now is before `trial_ends_at`) or with `paid_at` set opens every lesson. Any other account opens the first `FREE_LESSONS_PER_PLAN` (1) lesson of each plan. The backend decides: every `LessonSummary` carries `locked`, `GET /api/lessons/:id` answers a locked lesson without content and without starting generation, and a retry or a quiz submission on one answers 402 `payment_required`. The frontend only shows the lock and links to the paywall. When the trial ends without a payment the lessons lock again; `GET /api/subscription` tells the paywall that the trial is over.
 
 ## Admin analytics
 

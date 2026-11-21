@@ -115,6 +115,9 @@ export const LessonSummary = z.object({
   questionCount: z.number().int().min(1).nullable(),
   completedAt: z.string().datetime().nullable(),
   lastScore: z.number().min(0).max(1).nullable(),
+  // True when the account may not open the lesson: it is past the plan's
+  // free lessons and the account has no running trial and has not paid.
+  locked: z.boolean(),
 });
 export type LessonSummary = z.infer<typeof LessonSummary>;
 
@@ -338,6 +341,9 @@ export type Curriculum = z.infer<typeof Curriculum>;
 
 // Every account starts with a free trial of this many days.
 export const TRIAL_DAYS = 7;
+// Without a running trial or a payment, an account can open this many lessons
+// of each plan, counted from the start (position 0). The rest are locked.
+export const FREE_LESSONS_PER_PLAN = 1;
 
 export const BillingPlan = z.enum(["yearly", "monthly"]);
 export type BillingPlan = z.infer<typeof BillingPlan>;

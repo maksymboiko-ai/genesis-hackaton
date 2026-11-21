@@ -23,6 +23,18 @@ export async function signInTestParent() {
   parent.cookie = p.cookie;
 }
 
+/** Gives an account a trial that ends `days` from now (already over if negative). */
+export function giveTrial(ownerId: string, days = 7) {
+  const at = (offsetDays: number) => new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString();
+  memory().data.subscriptions.push({
+    ownerId,
+    plan: "yearly",
+    trialStartedAt: at(Math.min(0, days) - 7),
+    trialEndsAt: at(days),
+    paidAt: null,
+  });
+}
+
 /** A JSON request, signed in as the test parent unless `cookie` is given (use "" for none). */
 export function jsonRequest(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   const withAuth: Record<string, string> = "cookie" in headers ? { ...headers } : { cookie: parent.cookie, ...headers };

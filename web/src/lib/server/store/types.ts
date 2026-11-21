@@ -259,6 +259,7 @@ export interface Store {
   countLlmCallsSince(sinceIso: string): Promise<number>;
 
   // --- subscription ---
+  getSubscription(ownerId: string): Promise<SubscriptionRow | null>;
   /**
    * Starts the account's trial unless it already has a subscription. Returns
    * the stored row either way: the first trial is never replaced.

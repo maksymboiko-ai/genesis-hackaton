@@ -21,6 +21,7 @@ import { startLessonGeneration, STALE_JOB_MS } from "./lessons";
 import { toCurriculum, toCurriculumListItem } from "./mappers";
 import { getStore } from "./store";
 import type { NewLesson } from "./store/types";
+import { fullAccess } from "./subscription";
 import { cleanText, toSkillSlug } from "./text";
 import { cleanMinutes, fallbackMinutes } from "./timing";
 
@@ -145,7 +146,7 @@ export async function createCurriculum(user: AuthUser, body: CreateCurriculumReq
   });
   const [first] = await store.listLessons(id);
   if (first) await startLessonGeneration(first.id);
-  return { status: "created", curriculum: await getCurriculum(id) };
+  return { status: "created", curriculum: await getCurriculum(user, id) };
 }
 
 /** The map of a plan's book, or [] when the book is gone or not ready. */
@@ -209,7 +210,7 @@ export async function extendCurriculum(user: AuthUser, id: string): Promise<Curr
     await store.releaseReplan(id).catch(() => {});
     throw err;
   }
-  return getCurriculum(id);
+  return getCurriculum(user, id);
 }
 
 export async function listCurricula(user: AuthUser, childId: string) {
@@ -220,13 +221,18 @@ export async function listCurricula(user: AuthUser, childId: string) {
 /** GET /curricula/:id for the signed-in parent. */
 export async function getOwnedCurriculum(user: AuthUser, id: string): Promise<Curriculum> {
   await ownedCurriculum(user, id);
-  return getCurriculum(id);
+  return getCurriculum(user, id);
 }
 
-export async function getCurriculum(id: string): Promise<Curriculum> {
+/** A plan the caller has already checked is the parent's own. */
+async function getCurriculum(user: AuthUser, id: string): Promise<Curriculum> {
   const store = getStore();
   const row = await store.getCurriculum(id);
   if (!row) throw notFound("Curriculum");
-  const [lessons, events] = await Promise.all([store.listLessons(id), store.listReplanEvents(id)]);
-  return toCurriculum(row, lessons, events);
+  const [lessons, events, open] = await Promise.all([
+    store.listLessons(id),
+    store.listReplanEvents(id),
+    fullAccess(user),
+  ]);
+  return toCurriculum(row, lessons, events, open);
 }

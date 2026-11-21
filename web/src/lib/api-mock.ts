@@ -27,6 +27,7 @@ import {
   SubmitAttemptRequest,
 } from '@/contracts/api'
 import type { ApiError } from '@/contracts/api'
+import { hasFullAccess, lessonLocked } from './access'
 import { computeAnalytics } from './analytics'
 import { MOCK_LESSONS } from './api-mock-lessons'
 import { gradeSubjectFor } from '@/contracts/subjects'
@@ -34,7 +35,7 @@ import { subjectKey } from './subjects'
 
 type StoredChild = Child & { notes: string }
 type StoredBook = Book & { readyAt: number }
-type StoredLesson = LessonSummary & { content: LessonContent | null; readyAt: number | null }
+type StoredLesson = Omit<LessonSummary, 'locked'> & { content: LessonContent | null; readyAt: number | null }
 type StoredCurriculum = Omit<Curriculum, 'lessons' | 'replanEvents'> & {
   lastReplanAt: number
   replanReadyAt: number | null
@@ -366,14 +367,29 @@ function omit<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit
   return copy
 }
 
-function summary(lesson: StoredLesson): LessonSummary {
-  return { ...omit(lesson, 'content', 'readyAt'), questionCount: lesson.content?.questions.length ?? null }
+// A running trial or a payment on the signed-in account opens every lesson.
+function fullAccess(db: Db) {
+  return hasFullAccess(db.subscriptions.find((candidate) => candidate.accountId === db.signedIn) ?? null)
+}
+
+function summary(db: Db, lesson: StoredLesson): LessonSummary {
+  return {
+    ...omit(lesson, 'content', 'readyAt'),
+    questionCount: lesson.content?.questions.length ?? null,
+    locked: lessonLocked(lesson.position, fullAccess(db)),
+  }
+}
+
+function assertOpen(db: Db, lesson: StoredLesson) {
+  if (lessonLocked(lesson.position, fullAccess(db))) {
+    throw new MockError(402, 'payment_required', 'Start the free trial to open this lesson.')
+  }
 }
 
 function publicCurriculum(db: Db, curriculum: StoredCurriculum): Curriculum {
   return {
     ...listItem(curriculum),
-    lessons: lessonsOf(db, curriculum.id).map(summary),
+    lessons: lessonsOf(db, curriculum.id).map((lesson) => summary(db, lesson)),
     replanEvents: db.events.filter((event) => event.curriculumId === curriculum.id),
   }
 }
@@ -507,6 +523,12 @@ function startTrial(db: Db, raw: unknown) {
   return omit(subscription, 'accountId')
 }
 
+function getSubscription(db: Db) {
+  if (!db.signedIn) throw new MockError(401, 'unauthorized', 'Sign in to continue.')
+  const subscription = db.subscriptions.find((candidate) => candidate.accountId === db.signedIn)
+  return { subscription: subscription ? omit(subscription, 'accountId') : null }
+}
+
 // The dashboard over this browser's mock data. There are no model calls and
 // no admin list here: any signed-in mock account may look.
 function adminAnalytics(db: Db) {
@@ -541,18 +563,21 @@ function adminAnalytics(db: Db) {
 
 function retryLesson(db: Db, lessonId: string) {
   const lesson = find(db.lessons, lessonId, 'Lesson')
+  assertOpen(db, lesson)
   if (lesson.contentStatus === 'failed') lesson.contentStatus = 'pending'
   return getLesson(db, lessonId)
 }
 
 function getLesson(db: Db, lessonId: string) {
   const lesson = find(db.lessons, lessonId, 'Lesson')
+  // A locked lesson comes back without content and starts nothing.
+  if (summary(db, lesson).locked) return { ...summary(db, lesson), content: null }
   if (lesson.contentStatus === 'pending') {
     lesson.contentStatus = 'generating'
     lesson.readyAt = Date.now() + LESSON_MS
   }
   return {
-    ...summary(lesson),
+    ...summary(db, lesson),
     content: lesson.content && {
       bodyMarkdown: lesson.content.bodyMarkdown,
       // Lessons saved in the browser before blocks existed have none.
@@ -571,6 +596,7 @@ function submitAttempt(db: Db, lessonId: string, raw: unknown) {
   const body = parseBody<SubmitAttemptRequest>(SubmitAttemptRequest, raw)
   const lesson = find(db.lessons, lessonId, 'Lesson')
   const curriculum = find(db.curricula, lesson.curriculumId, 'Curriculum')
+  assertOpen(db, lesson)
   if (!lesson.content) throw new MockError(409, 'conflict', 'The lesson is not ready yet.')
 
   const results: QuestionResult[] = lesson.content.questions.map((question) => {
@@ -703,6 +729,8 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return retryLesson(db, itemId)
     case 'POST lessons/:id/attempts':
       return submitAttempt(db, itemId, body)
+    case 'GET subscription':
+      return getSubscription(db)
     case 'POST subscription':
       return startTrial(db, body)
     case 'GET admin/:id':

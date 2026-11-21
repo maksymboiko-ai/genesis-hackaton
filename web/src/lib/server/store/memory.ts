@@ -435,6 +435,11 @@ export class MemoryStore implements Store {
     return this.data.llmCalls.filter((c) => c.createdAt > sinceIso).length;
   }
 
+  async getSubscription(ownerId: string) {
+    const row = this.data.subscriptions.find((s) => s.ownerId === ownerId);
+    return row ? copy(row) : null;
+  }
+
   async startTrial(input: { ownerId: string; plan: "yearly" | "monthly"; trialEndsAtIso: string }) {
     let row = this.data.subscriptions.find((s) => s.ownerId === input.ownerId);
     if (!row) {

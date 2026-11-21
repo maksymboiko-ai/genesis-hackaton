@@ -13,6 +13,7 @@ import {
   GetLessonResponse,
   GetProfileResponse,
   GetStreakResponse,
+  GetSubscriptionResponse,
   ListBooksResponse,
   ListChildrenResponse,
   ListCurriculaResponse,
@@ -132,6 +133,8 @@ export const api = {
   submitAttempt: (lessonId: string, body: SubmitAttemptRequest) =>
     request(SubmitAttemptResponse, `/lessons/${lessonId}/attempts`, post(body)),
 
+  // The account's trial and payment state; null before a trial was started.
+  getSubscription: () => request(GetSubscriptionResponse, '/subscription'),
   // "Start free trial" on the paywall. Safe to repeat: the first trial stays.
   startTrial: (body: StartTrialRequest) => request(StartTrialResponse, '/subscription', post(body)),
 

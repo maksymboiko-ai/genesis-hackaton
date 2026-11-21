@@ -9,17 +9,19 @@ import {
   SkillSlug,
   type Question,
 } from "@/contracts/domain";
+import { lessonLocked } from "@/lib/access";
 import { blockProblem, placeBlocks } from "@/lib/lesson-blocks";
 import { ownedLesson } from "./access";
 import { getAi } from "./ai";
 import type { AuthUser } from "./auth";
 import { runInBackground } from "./background";
 import { buildLearnerProfile } from "./children";
-
+import { paymentRequired } from "./errors";
 import { toLessonSummary } from "./mappers";
 import { chunksForLesson } from "./retrieval";
 import { getStore } from "./store";
 import type { LessonRow } from "./store/types";
+import { fullAccess } from "./subscription";
 import { cleanText, sanitizeMarkdown } from "./text";
 import { minutesFromContent } from "./timing";
 
@@ -191,32 +193,37 @@ function needsGeneration(row: LessonRow): boolean {
 /**
  * GET /lessons/:id. Starts generation when the content is pending, stuck, or
  * failed longer ago than the retry cooldown. Never returns correctIndex or explanation.
+ * A locked lesson comes back without content and starts nothing.
  */
 export async function getLesson(user: AuthUser, lessonId: string): Promise<GetLessonResponse> {
   const store = getStore();
   let row = (await ownedLesson(user, lessonId)).lesson;
+  const open = await fullAccess(user);
+  if (lessonLocked(row.position, open)) return { ...toLessonSummary(row, open), content: null };
   if (needsGeneration(row) && (await startLessonGeneration(row.id))) {
     row = (await store.getLesson(lessonId)) ?? row;
   }
-  return toLessonResponse(row);
+  return toLessonResponse(row, open);
 }
 
 /** POST /lessons/:id/retry: "Try again" on a failed lesson, without the cooldown. */
 export async function retryLesson(user: AuthUser, lessonId: string): Promise<GetLessonResponse> {
   const store = getStore();
   let row = (await ownedLesson(user, lessonId)).lesson;
+  const open = await fullAccess(user);
+  if (lessonLocked(row.position, open)) throw paymentRequired();
   const retryable =
     row.contentStatus === "failed" || row.contentStatus === "pending" || needsGeneration(row);
   if (retryable && (await startLessonGeneration(row.id, true))) {
     row = (await store.getLesson(lessonId)) ?? row;
   }
-  return toLessonResponse(row);
+  return toLessonResponse(row, open);
 }
 
-function toLessonResponse(row: LessonRow): GetLessonResponse {
+function toLessonResponse(row: LessonRow, open: boolean): GetLessonResponse {
   const content = readContent(row);
   return {
-    ...toLessonSummary(row),
+    ...toLessonSummary(row, open),
     contentStatus: row.contentStatus === "ready" && !content ? "failed" : row.contentStatus,
     content: content && {
       bodyMarkdown: content.bodyMarkdown,
