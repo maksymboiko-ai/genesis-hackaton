@@ -50,7 +50,7 @@ function sourceSection(sourceChunks: string[]): string {
   if (!sourceChunks.length) return "";
   return section(
     "Textbook excerpts",
-    "Base the content on these excerpts: follow their order of topics and their notation, and do not contradict them. Teach the method the way the excerpts teach it, and call every method, rule, step and check by the name the excerpts give it, so the lesson matches what the child sees in the book. Where they do not cover something, teach it in the same style.\n\n" +
+    "Base the content on these excerpts: follow their order of topics and their notation, and do not contradict them. Teach the method the way the excerpts teach it, and call every method, rule, step and check by the name the excerpts give it, so the lesson matches what the child sees in the book. Keep the excerpts' own picture of the idea and its everyday words too: where the book has its own word for something, use that word every time instead of the usual school term. Where they do not cover something, teach it in the same style.\n\n" +
       sourceChunks
         .map((chunk, index) => `[Excerpt ${index + 1}]\n${chunk}`)
         .join("\n\n"),
@@ -192,7 +192,7 @@ export function replanPrompt(input: ReplanInput): Prompt {
       "You adjust a child's curriculum after their recent quiz results.",
       task,
       "The diagnosis summary is 1 to 2 sentences addressed to the parent, specific and kind. The diagnosis childMessage is 1 to 2 sentences addressed to the child about the same change: warm, concrete, at their grade level, with no scores and no words like failed or wrong.",
-      'Each new lesson has a title, a one-sentence objective, 1 to 3 skills and a reason: one sentence to the child on why this lesson was added, naming what in their answers led to it ("You mixed up the sign when a negative number moved, so we start there").',
+      'Each new lesson has a title, a one-sentence objective, 1 to 3 skills and a reason: one sentence of at most 25 words to the child on why this lesson was added, naming what in their answers led to it ("You mixed up the sign when a negative number moved, so we start there").',
       SKILL_RULE,
       STYLE_RULE,
     ]),

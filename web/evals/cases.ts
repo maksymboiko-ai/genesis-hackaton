@@ -254,8 +254,12 @@ async function lessonCase(
     "wrong choices get their own feedback": content.questions.every(
       (q) => new Set(q.choiceFeedback).size === q.choiceFeedback.length,
     ),
-    "feedback never says wrong or incorrect": !content.questions.some((q) =>
-      q.choiceFeedback.some((text) => /\b(wrong|incorrect|silly)\b/i.test(text)),
+    // A verdict on the child or the answer ("That is wrong", "Incorrect.").
+    // "The wrong order" describes a slip and is fine.
+    "feedback gives no verdict": !content.questions.some((q) =>
+      q.choiceFeedback.some((text) =>
+        /^(wrong|incorrect|no)\b|\b(is|are|was|were|that's|you're) (wrong|incorrect|silly)\b/i.test(text),
+      ),
     ),
     "math is in backticks": /`[^`]*\d[^`]*`/.test(content.bodyMarkdown),
     "ends with a Remember line": /\*\*Remember:?\*\*/.test(content.bodyMarkdown),
