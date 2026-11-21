@@ -42,6 +42,7 @@ function subscribe(listener: () => void) {
 
 const setUser = (user: User) => write({ ...read(), user })
 const setChildId = (childId: string | null) => write({ ...read(), childId })
+const signIn = (user: User, childId: string | null) => write({ user, childId })
 const signOut = () => write(EMPTY)
 
 export function useSession() {
@@ -53,6 +54,7 @@ export function useSession() {
     childId: session?.childId ?? null,
     setUser,
     setChildId,
+    signIn,
     signOut,
   }
 }
