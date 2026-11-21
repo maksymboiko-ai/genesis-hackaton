@@ -58,6 +58,9 @@ type StructuredCall<S extends z.ZodType, T> = {
   // Turns parsed output into the return value. Throws InvalidOutputError
   // when the output breaks a rule.
   check: (output: z.infer<S>) => T;
+  // Cap on output tokens. Without one OpenRouter reserves credit for the
+  // model's full output limit on every in-flight request.
+  maxTokens?: number;
   onCall?: (record: LlmCallRecord) => void;
 };
 
@@ -96,6 +99,7 @@ export async function callStructured<S extends z.ZodType, T>(
           },
         },
         provider: { require_parameters: true },
+        ...(call.maxTokens ? { max_tokens: call.maxTokens } : {}),
       };
       const completion = await getClient().chat.completions.create(body);
       inputTokens = completion.usage?.prompt_tokens ?? null;

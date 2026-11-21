@@ -27,6 +27,9 @@ import { CASES, excellingAttempts, strugglingAttempts } from "./cases";
 // does not grade its own writing.
 const DEFAULT_JUDGE = "anthropic/claude-opus-5.5";
 const CONCURRENCY = 6;
+// Verdicts are short; an uncapped call to an expensive judge reserves dollars
+// of credit while it runs and six at once can be refused with a 402.
+const JUDGE_MAX_TOKENS = 6000;
 
 type Criterion = { id: string; text: string };
 
@@ -363,6 +366,7 @@ function judge(sample: Sample, model: string, onCall: (record: LlmCallRecord) =>
     user: judgeUser(sample),
     schemaName: "verdicts",
     schema: Verdicts,
+    maxTokens: JUDGE_MAX_TOKENS,
     onCall,
     check: ({ verdicts }) =>
       sample.criteria.map(({ id }) => {
