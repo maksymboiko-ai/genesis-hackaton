@@ -116,6 +116,13 @@ export const GetLessonResponse = LessonSummary.extend({
 });
 export type GetLessonResponse = z.infer<typeof GetLessonResponse>;
 
+// POST /lessons/:lessonId/retry
+// The "Try again" button for a lesson whose contentStatus is "failed": starts
+// generation again at once. (A GET retries a failed lesson only a minute
+// after the failure, so polling never loops on paid retries.) A lesson that
+// is ready or still generating is returned as it is. No body.
+export const RetryLessonResponse = GetLessonResponse;
+
 // POST /lessons/:lessonId/attempts
 // Every question must be answered exactly once.
 export const SubmitAttemptRequest = z.object({

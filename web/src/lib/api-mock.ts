@@ -424,6 +424,12 @@ function getLesson(db: Db, lessonId: string) {
   }
 }
 
+function retryLesson(db: Db, lessonId: string) {
+  const lesson = find(db.lessons, lessonId, 'Lesson')
+  if (lesson.contentStatus === 'failed') lesson.contentStatus = 'pending'
+  return getLesson(db, lessonId)
+}
+
 function submitAttempt(db: Db, lessonId: string, raw: unknown) {
   const body = parseBody<SubmitAttemptRequest>(SubmitAttemptRequest, raw)
   const lesson = find(db.lessons, lessonId, 'Lesson')
@@ -526,6 +532,8 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return publicCurriculum(db, find(db.curricula, itemId, 'Curriculum'))
     case 'GET lessons/:id':
       return getLesson(db, itemId)
+    case 'POST lessons/:id/retry':
+      return retryLesson(db, itemId)
     case 'POST lessons/:id/attempts':
       return submitAttempt(db, itemId, body)
     default:

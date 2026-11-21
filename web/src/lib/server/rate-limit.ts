@@ -42,5 +42,7 @@ export const LIMITS = {
   write: { name: "write", capacity: 60, perMinute: 60 },
   curriculum: { name: "curriculum", capacity: 10, perMinute: 2 },
   attempt: { name: "attempt", capacity: 30, perMinute: 30 },
+  // Each retry is a paid model call.
+  retry: { name: "retry", capacity: 5, perMinute: 2 },
   book: { name: "book", capacity: 5, perMinute: 1 },
 } satisfies Record<string, RateLimitRule>;

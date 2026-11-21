@@ -93,10 +93,14 @@ export async function generateLessonContent(lessonId: string): Promise<void> {
 /**
  * Claims a lesson and generates it in the background, then prefetches the
  * next pending lesson so the child rarely waits. Returns whether it claimed.
+ * `retryNow` skips the cooldown on failed lessons (explicit "Try again").
  */
-export async function startLessonGeneration(lessonId: string): Promise<boolean> {
+export async function startLessonGeneration(lessonId: string, retryNow = false): Promise<boolean> {
   const store = getStore();
-  if (!(await claim(lessonId))) return false;
+  const claimed = retryNow
+    ? await store.claimLesson(lessonId, ago(STALE_JOB_MS), new Date().toISOString())
+    : await claim(lessonId);
+  if (!claimed) return false;
   runInBackground(`lesson ${lessonId}`, async () => {
     await generateLessonContent(lessonId);
     const lesson = await store.getLesson(lessonId);
@@ -129,6 +133,23 @@ export async function getLesson(lessonId: string): Promise<GetLessonResponse> {
   if (needsGeneration(row) && (await startLessonGeneration(row.id))) {
     row = (await store.getLesson(lessonId)) ?? row;
   }
+  return toLessonResponse(row);
+}
+
+/** POST /lessons/:id/retry: "Try again" on a failed lesson, without the cooldown. */
+export async function retryLesson(lessonId: string): Promise<GetLessonResponse> {
+  const store = getStore();
+  let row = await store.getLesson(lessonId);
+  if (!row) throw notFound("Lesson");
+  const retryable =
+    row.contentStatus === "failed" || row.contentStatus === "pending" || needsGeneration(row);
+  if (retryable && (await startLessonGeneration(row.id, true))) {
+    row = (await store.getLesson(lessonId)) ?? row;
+  }
+  return toLessonResponse(row);
+}
+
+function toLessonResponse(row: LessonRow): GetLessonResponse {
   const content = readContent(row);
   return {
     ...toLessonSummary(row),

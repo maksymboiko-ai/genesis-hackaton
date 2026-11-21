@@ -11,6 +11,7 @@ import {
   ListBooksResponse,
   ListChildrenResponse,
   ListCurriculaResponse,
+  RetryLessonResponse,
   SubmitAttemptResponse,
 } from '@/contracts/api'
 import type {
@@ -77,6 +78,9 @@ export const api = {
     request(GetCurriculumResponse, `/curricula/${curriculumId}`),
 
   getLesson: (lessonId: string) => request(GetLessonResponse, `/lessons/${lessonId}`),
+  // "Try again" on a failed lesson.
+  retryLesson: (lessonId: string) =>
+    request(RetryLessonResponse, `/lessons/${lessonId}/retry`, { method: 'POST' }),
   submitAttempt: (lessonId: string, body: SubmitAttemptRequest) =>
     request(SubmitAttemptResponse, `/lessons/${lessonId}/attempts`, post(body)),
 }
