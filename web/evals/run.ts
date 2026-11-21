@@ -103,7 +103,7 @@ function summarize(model: string, results: CaseResult[], pricing: Pricing) {
   };
 }
 
-const TASKS: EvalCase["task"][] = ["outline", "lesson", "replan", "learner_notes"];
+const TASKS: EvalCase["task"][] = ["outline", "lesson", "replan", "learner_notes", "book_map"];
 
 function summarizeByTask(model: string, results: CaseResult[], pricing: Pricing) {
   return TASKS.map((task) => ({ task, results: results.filter((r) => r.task === task) }))

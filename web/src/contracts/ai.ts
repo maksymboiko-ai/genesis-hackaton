@@ -109,7 +109,10 @@ export const GeneratedQuestion = z.object({
   choices: z.array(z.string()),
   // Zero-based index into choices.
   correctIndex: z.number(),
-  explanation: z.string(),
+  // One entry per choice, in the same order: what to tell a child who
+  // picked it. Becomes Question.choiceFeedback; the entry at correctIndex
+  // is also stored as Question.explanation.
+  choiceFeedback: z.array(z.string()),
   // One of the lesson's skills.
   skill: z.string(),
 });
@@ -121,16 +124,24 @@ export const LessonOutput = z.object({
 });
 export type LessonOutput = z.infer<typeof LessonOutput>;
 
+// A lesson a replan adds. reason is one sentence to the child on why the
+// lesson is in the plan; the backend stores it in lesson.reason.
+export const PlannedLesson = LessonOutline.extend({
+  reason: z.string(),
+});
+export type PlannedLesson = z.infer<typeof PlannedLesson>;
+
 // The model only proposes new lessons. The backend decides where they go and
 // adds the retry lessons itself.
 export const ReplanOutput = z.object({
   diagnosis: z.object({
     summary: z.string(),
+    childMessage: z.string(),
     mistakes: z.array(z.string()),
     missingSkills: z.array(z.string()),
   }),
   // "struggling": remedial lessons. "excelling": extension lessons.
-  newLessons: z.array(LessonOutline),
+  newLessons: z.array(PlannedLesson),
 });
 export type ReplanOutput = z.infer<typeof ReplanOutput>;
 
@@ -226,7 +237,7 @@ export interface AiService {
   replan(
     input: ReplanInput,
     options?: AiCallOptions,
-  ): Promise<{ diagnosis: ReplanDiagnosis; newLessons: LessonOutline[] }>;
+  ): Promise<{ diagnosis: ReplanDiagnosis; newLessons: PlannedLesson[] }>;
 
   updateLearnerNotes(
     input: UpdateLearnerNotesInput,
