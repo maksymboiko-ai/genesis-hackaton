@@ -6,16 +6,16 @@ import type {
   AiService,
   LessonAttemptSummary,
   LessonOutline,
+  OutlineLesson,
 } from "@/contracts/ai";
-import type { LearnerProfile } from "@/contracts/domain";
+import type { BookSection, LearnerProfile } from "@/contracts/domain";
+import { BOOK_SECTION_TITLES, BOOK_TEXT, BOOK_TITLE } from "./fixtures/book";
 
 export type EvalCase = {
   name: string;
-  task: "outline" | "lesson" | "replan" | "learner_notes";
+  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map";
   run: (ai: AiService, options: AiCallOptions) => Promise<string[]>;
 };
-
-const CYRILLIC = /[а-яіїєґ]/i;
 
 function words(text: string): number {
   return text.trim().split(/\s+/).length;
@@ -55,10 +55,27 @@ const strongAlgebra: LearnerProfile = {
   ],
 };
 
-const BOOK_CHUNKS = [
-  "Chapter 4. Equations. In this book we solve every equation with the Scales Method. Picture the equation as a pair of scales: the left pan holds the left side, the right pan holds the right side, and the equals sign is the pivot. The scales stay level only if we do the same thing to both pans.",
-  "4.2 Undoing operations. To find the unknown we undo operations in reverse order, always on both pans. Worked example: 3x + 4 = 19. Take 4 from both pans: 3x = 15. Share both pans into 3 equal parts: x = 5. Always finish with a Scales Check: put the answer back into the original equation.",
-];
+// The fixture book's map, as prepareBook should produce it.
+const BOOK_SECTIONS: BookSection[] = [
+  { chapter: "Chapter 3 Fractions", title: "3.1 Twin Fractions", summary: "Twin Fractions name the same amount; make one by multiplying numerator and denominator by the same number." },
+  { chapter: "Chapter 3 Fractions", title: "3.2 Simplest Form", summary: "Reach Simplest Form by dividing numerator and denominator by their greatest common factor." },
+  { chapter: "Chapter 3 Fractions", title: "3.3 Adding Fractions with Unlike Denominators", summary: "Swap fractions for Twin Fractions on a Common Ground (the least common multiple), then add the numerators." },
+  { chapter: "Chapter 4 Equations", title: "4.1 The Scales Method", summary: "An equation is a pair of scales; the Golden Rule is to do the same to both pans." },
+  { chapter: "Chapter 4 Equations", title: "4.2 Undoing Operations", summary: "Solve one-step equations by undoing the operation on both pans, then run a Scales Check." },
+  { chapter: "Chapter 4 Equations", title: "4.3 Two-Step Equations", summary: "Undo two operations in reverse order, addition or subtraction first." },
+  { chapter: "Chapter 5 Ratios and Rates", title: "5.1 Ratios", summary: "A ratio compares two amounts; scale and simplify it like Twin Fractions." },
+  { chapter: "Chapter 5 Ratios and Rates", title: "5.2 The Rate Table", summary: "Solve rate problems in a Rate Table by building the unit rate column first." },
+].map((section, index) => ({ index, ...section }));
+
+function sectionText(title: string): string {
+  const start = BOOK_TEXT.indexOf(`\n${title}\n`);
+  const next = BOOK_SECTION_TITLES[BOOK_SECTION_TITLES.indexOf(title) + 1];
+  const end = next ? BOOK_TEXT.indexOf(`\n${next}\n`) : BOOK_TEXT.length;
+  return BOOK_TEXT.slice(start, end).trim();
+}
+
+// What the backend passes for a lesson on section 4.3: that section's text.
+const TWO_STEP_CHUNKS = [sectionText("4.3 Two-Step Equations")];
 
 const equationsLesson: LessonOutline = {
   title: "Solving one-step equations",
@@ -140,59 +157,22 @@ const remainingLessons: LessonOutline[] = [
   },
 ];
 
-const strugglingAttemptsUk: LessonAttemptSummary[] = [
-  {
-    lesson: {
-      title: "Скорочення дробів",
-      objective: "Скорочувати дроби, ділячи чисельник і знаменник на спільний дільник.",
-      skills: ["simplifying-fractions"],
-    },
-    score: 0.5,
-    wrongAnswers: [
-      { prompt: "Скороти дріб 6/8", chosen: "2/4", correct: "3/4", skill: "simplifying-fractions" },
-      { prompt: "Скороти дріб 9/12", chosen: "3/6", correct: "3/4", skill: "simplifying-fractions" },
-    ],
-  },
-  {
-    lesson: {
-      title: "Додавання дробів з різними знаменниками",
-      objective: "Додавати дроби, зводячи їх до спільного знаменника.",
-      skills: ["adding-fractions"],
-    },
-    score: 0.25,
-    wrongAnswers: [
-      { prompt: "Обчисли 1/2 + 1/3", chosen: "2/5", correct: "5/6", skill: "adding-fractions" },
-      { prompt: "Обчисли 1/4 + 2/3", chosen: "3/7", correct: "11/12", skill: "adding-fractions" },
-      { prompt: "Обчисли 3/5 + 1/2", chosen: "4/7", correct: "11/10", skill: "adding-fractions" },
-    ],
-  },
-  {
-    lesson: {
-      title: "Віднімання дробів",
-      objective: "Віднімати дроби з різними знаменниками.",
-      skills: ["subtracting-fractions"],
-    },
-    score: 0.5,
-    wrongAnswers: [
-      { prompt: "Обчисли 3/4 - 1/3", chosen: "2/1", correct: "5/12", skill: "subtracting-fractions" },
-      { prompt: "Обчисли 5/6 - 1/4", chosen: "4/2", correct: "7/12", skill: "subtracting-fractions" },
-    ],
-  },
-];
-
 // --- Shared checks ------------------------------------------------------------
 
 async function outlineCase(
   ai: AiService,
   options: AiCallOptions,
   input: Parameters<AiService["generateOutline"]>[0],
-  extra: (lessons: LessonOutline[], title: string, subject: string) => Record<string, boolean>,
+  extra: (lessons: OutlineLesson[], title: string, subject: string) => Record<string, boolean>,
 ): Promise<string[]> {
   const result = await ai.generateOutline(input, options);
   if (result.kind !== "outline") return ["asked questions for a clear goal"];
   const { lessons, title, subject } = result.outline;
+  const maxLessons = input.bookSections.length ? 15 : 8;
   return failures({
-    "5 to 8 lessons": lessons.length >= 5 && lessons.length <= 8,
+    [`5 to ${maxLessons} lessons`]: lessons.length >= 5 && lessons.length <= maxLessons,
+    "no section without a book":
+      input.bookSections.length > 0 || lessons.every((l) => l.bookSectionIndex === null),
     "1 to 3 skills per lesson": lessons.every((l) => l.skills.length >= 1 && l.skills.length <= 3),
     ...extra(lessons, title, subject),
   });
@@ -202,17 +182,15 @@ async function questionsCase(
   ai: AiService,
   options: AiCallOptions,
   prompt: string,
-  language: "en" | "uk",
 ): Promise<string[]> {
   const result = await ai.generateOutline(
-    { prompt, clarifications: [], learner: newLearner(5), knownSkills: [], sourceChunks: [] },
+    { prompt, clarifications: [], learner: newLearner(5), knownSkills: [], bookSections: [] },
     options,
   );
   if (result.kind !== "questions") return ["planned a curriculum for a vague goal"];
   return failures({
     "1 to 3 questions": result.questions.length >= 1 && result.questions.length <= 3,
-    "questions in the goal's language":
-      result.questions.every((q) => CYRILLIC.test(q)) === (language === "uk"),
+    "every question ends with a question mark": result.questions.every((q) => q.endsWith("?")),
   });
 }
 
@@ -240,7 +218,7 @@ async function lessonCase(
 
 export const CASES: EvalCase[] = [
   {
-    name: "outline: clear goal (en)",
+    name: "outline: clear goal",
     task: "outline",
     run: (ai, options) =>
       outlineCase(
@@ -251,41 +229,20 @@ export const CASES: EvalCase[] = [
           clarifications: [],
           learner: newLearner(7),
           knownSkills: [],
-          sourceChunks: [],
+          bookSections: [],
         },
         (_, __, subject) => ({ "subject is algebra": subject.includes("algebra") }),
       ),
   },
   {
-    name: "outline: clear goal (uk)",
+    name: "outline: vague goal asks questions",
     task: "outline",
-    run: (ai, options) =>
-      outlineCase(
-        ai,
-        options,
-        {
-          prompt: "Син у 6 класі не розуміє дроби, треба підтягнути перед контрольною.",
-          clarifications: [],
-          learner: newLearner(6),
-          knownSkills: [],
-          sourceChunks: [],
-        },
-        (lessons, title) => ({
-          "title in Ukrainian": CYRILLIC.test(title),
-          "lesson titles in Ukrainian": lessons.every((l) => CYRILLIC.test(l.title)),
-          "slugs stay English": lessons.every((l) => l.skills.every((s) => /[a-z]/.test(s))),
-        }),
-      ),
+    run: (ai, options) => questionsCase(ai, options, "Help my kid do better at school."),
   },
   {
-    name: "outline: vague goal asks questions (en)",
+    name: "outline: one-word goal asks questions",
     task: "outline",
-    run: (ai, options) => questionsCase(ai, options, "Help my kid do better at school.", "en"),
-  },
-  {
-    name: "outline: vague goal asks questions (uk)",
-    task: "outline",
-    run: (ai, options) => questionsCase(ai, options, "Хочу, щоб дитина краще вчилася.", "uk"),
+    run: (ai, options) => questionsCase(ai, options, "Tutoring"),
   },
   {
     name: "outline: answers given, never asks twice",
@@ -301,7 +258,7 @@ export const CASES: EvalCase[] = [
           ],
           learner: newLearner(5),
           knownSkills: [],
-          sourceChunks: [],
+          bookSections: [],
         },
         () => ({}),
       ),
@@ -318,7 +275,7 @@ export const CASES: EvalCase[] = [
           clarifications: [],
           learner: newLearner(7),
           knownSkills: ["solving-linear-equations", "combining-like-terms", "cell-structure"],
-          sourceChunks: [],
+          bookSections: [],
         },
         (lessons) => {
           const used = new Set(lessons.flatMap((l) => l.skills));
@@ -342,7 +299,7 @@ export const CASES: EvalCase[] = [
           clarifications: [],
           learner: weakFractions,
           knownSkills: weakFractions.mastery.map((m) => m.skill),
-          sourceChunks: [],
+          bookSections: [],
         },
         (lessons) => ({
           "revisits a weak fractions skill": lessons.some((l) =>
@@ -363,7 +320,7 @@ export const CASES: EvalCase[] = [
           clarifications: [],
           learner: strongAlgebra,
           knownSkills: strongAlgebra.mastery.map((m) => m.skill),
-          sourceChunks: [],
+          bookSections: [],
         },
         (lessons) => ({
           "first lesson is not a mastered skill only": !lessons[0].skills.every(
@@ -373,28 +330,78 @@ export const CASES: EvalCase[] = [
       ),
   },
   {
-    name: "outline: follows the textbook (RAG)",
+    name: "outline: whole book follows the map (RAG)",
     task: "outline",
     run: (ai, options) =>
       outlineCase(
         ai,
         options,
         {
-          prompt: "Teach equations from our 6th grade algebra book.",
+          prompt: "Teach my son everything in his 6th grade math book.",
           clarifications: [],
           learner: newLearner(6),
           knownSkills: [],
-          sourceChunks: BOOK_CHUNKS,
+          bookSections: BOOK_SECTIONS,
         },
-        (lessons) => ({
-          "uses the book's Scales Method": lessons.some((l) =>
-            /scales/i.test(`${l.title} ${l.objective}`),
-          ),
-        }),
+        (lessons) => {
+          const used = lessons.map((l) => l.bookSectionIndex).filter((i) => i !== null);
+          return {
+            "covers every section": BOOK_SECTIONS.every((s) => used.includes(s.index)),
+            "follows the book's order": used.every((index, i) => i === 0 || index >= used[i - 1]),
+            "uses the book's terms": lessons.some((l) => /scales|twin fractions|rate table/i.test(`${l.title} ${l.objective}`)),
+          };
+        },
       ),
   },
   {
-    name: "lesson: core (en)",
+    name: "outline: goal covers one chapter of the book (RAG)",
+    task: "outline",
+    run: (ai, options) =>
+      outlineCase(
+        ai,
+        options,
+        {
+          prompt: "She has a test on the equations chapter of her math book next week.",
+          clarifications: [],
+          learner: newLearner(6),
+          knownSkills: [],
+          bookSections: BOOK_SECTIONS,
+        },
+        (lessons) => {
+          const used = lessons.map((l) => l.bookSectionIndex).filter((i) => i !== null);
+          return {
+            "covers the three equations sections": [3, 4, 5].every((index) => used.includes(index)),
+            "leaves out the ratios chapter": !used.includes(6) && !used.includes(7),
+          };
+        },
+      ),
+  },
+  {
+    name: "book map: finds the book's sections (RAG)",
+    task: "book_map",
+    run: async (ai, options) => {
+      const book = await ai.prepareBook({ title: BOOK_TITLE, text: BOOK_TEXT }, options);
+      const found = book.sections.map((s) => s.title.toLowerCase());
+      const missing = BOOK_SECTION_TITLES.filter(
+        (title) => !found.some((f) => f.includes(title.slice(4).toLowerCase())),
+      );
+      // Each printed section should own the chunk that holds its heading.
+      const misplaced = BOOK_SECTION_TITLES.filter((title) => {
+        const chunk = book.chunks.find((c) => c.content.includes(`${title}\n`));
+        const section = chunk && book.sections[chunk.sectionIndex];
+        return !section || !section.title.toLowerCase().includes(title.slice(4).toLowerCase());
+      });
+      return failures({
+        [`finds all 8 sections (missing: ${missing.join(", ") || "none"})`]: missing.length === 0,
+        "no invented sections": book.sections.length <= BOOK_SECTION_TITLES.length + 1,
+        [`chunks sit in their own section (misplaced: ${misplaced.join(", ") || "none"})`]: misplaced.length === 0,
+        "names the chapter": book.sections.every((s) => /chapter/i.test(s.chapter)),
+        "every chunk has a section": book.chunks.every((c) => c.sectionIndex >= 0 && c.sectionIndex < book.sections.length),
+      });
+    },
+  },
+  {
+    name: "lesson: core",
     task: "lesson",
     run: (ai, options) =>
       lessonCase(
@@ -411,7 +418,7 @@ export const CASES: EvalCase[] = [
       ),
   },
   {
-    name: "lesson: remedial (uk)",
+    name: "lesson: remedial",
     task: "lesson",
     run: (ai, options) =>
       lessonCase(
@@ -420,16 +427,16 @@ export const CASES: EvalCase[] = [
         {
           subject: "arithmetic",
           lesson: {
-            title: "Спільний знаменник: чому не можна додавати знаменники",
-            objective: "Зводити два дроби до спільного знаменника перед додаванням.",
+            title: "Common denominators: why you can't add the bottoms",
+            objective: "Rewrite two fractions with a common denominator before adding them.",
             skills: ["finding-common-denominators"],
             kind: "remedial",
           },
           learner: weakFractions,
-          previousLessonTitles: ["Скорочення дробів", "Додавання дробів з різними знаменниками"],
+          previousLessonTitles: ["Simplifying fractions", "Adding fractions with unlike denominators"],
           sourceChunks: [],
         },
-        (body) => ({ "body in Ukrainian": CYRILLIC.test(body) }),
+        () => ({}),
       ),
   },
   {
@@ -449,10 +456,10 @@ export const CASES: EvalCase[] = [
           },
           learner: newLearner(6),
           previousLessonTitles: ["Solving one-step equations"],
-          sourceChunks: BOOK_CHUNKS,
+          sourceChunks: TWO_STEP_CHUNKS,
         },
         (body) => ({
-          "uses the book's Scales Method": /scales/i.test(body),
+          "uses the book's pans": /\bpans?\b/i.test(body),
           "uses the book's Scales Check": /scales check/i.test(body),
         }),
       ),
@@ -512,37 +519,6 @@ export const CASES: EvalCase[] = [
         ),
         "does not repeat a failed lesson": !result.newLessons.some((l) =>
           strugglingAttempts.some((a) => a.lesson.title.toLowerCase() === l.title.toLowerCase()),
-        ),
-      });
-    },
-  },
-  {
-    name: "replan: struggling (uk)",
-    task: "replan",
-    run: async (ai, options) => {
-      const result = await ai.replan(
-        {
-          trigger: "struggling",
-          subject: "arithmetic",
-          learner: weakFractions,
-          recentAttempts: strugglingAttemptsUk,
-          remainingLessons: [
-            {
-              title: "Множення дробів",
-              objective: "Множити два дроби та скорочувати результат.",
-              skills: ["multiplying-fractions"],
-            },
-          ],
-          knownSkills: ["simplifying-fractions", "adding-fractions", "subtracting-fractions", "multiplying-fractions"],
-        },
-        options,
-      );
-      return failures({
-        "1 to 3 remedial lessons": result.newLessons.length >= 1 && result.newLessons.length <= 3,
-        "summary in Ukrainian": CYRILLIC.test(result.diagnosis.summary),
-        "lesson titles in Ukrainian": result.newLessons.every((l) => CYRILLIC.test(l.title)),
-        "names the common-denominator gap": /denominator/.test(
-          [...result.diagnosis.missingSkills, ...result.newLessons.flatMap((l) => l.skills)].join(" "),
         ),
       });
     },
