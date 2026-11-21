@@ -8,6 +8,8 @@ import type { LlmCallRecord } from "@/contracts/ai";
 
 export type ChildRow = {
   id: string;
+  // The parent's account (auth user id).
+  ownerId: string | null;
   name: string;
   gradeLevel: number;
   notes: string;
@@ -22,6 +24,7 @@ export type MasteryRow = {
 
 export type BookRow = {
   id: string;
+  ownerId: string | null;
   title: string;
   storagePath: string;
   status: "processing" | "ready" | "failed";
@@ -105,17 +108,18 @@ export interface Store {
   ping(): Promise<void>;
 
   // --- child, skill_mastery ---
-  createChild(input: { name: string; gradeLevel: number }): Promise<ChildRow>;
-  listChildren(): Promise<ChildRow[]>;
+  createChild(input: { ownerId: string; name: string; gradeLevel: number }): Promise<ChildRow>;
+  /** The parent's children, oldest first. */
+  listChildren(ownerId: string): Promise<ChildRow[]>;
   getChild(id: string): Promise<ChildRow | null>;
   updateChildNotes(id: string, notes: string): Promise<void>;
   listMastery(childId: string): Promise<MasteryRow[]>;
 
   // --- book, book_chunk, file storage ---
-  createBook(input: { title: string; storagePath: string }): Promise<BookRow>;
+  createBook(input: { ownerId: string; title: string; storagePath: string }): Promise<BookRow>;
   getBook(id: string): Promise<BookRow | null>;
-  /** Newest first. */
-  listBooks(): Promise<BookRow[]>;
+  /** The parent's books, newest first. */
+  listBooks(ownerId: string): Promise<BookRow[]>;
   /** Stores the map and all chunks, then marks the book ready. */
   completeBook(
     id: string,

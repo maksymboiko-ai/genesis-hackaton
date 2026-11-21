@@ -226,6 +226,30 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 
 Added after checking the approved screens (`Product — learning app identity & screens.html`): F13–F16 above. The "we'll let your parent know" line on the failed-lesson screen is dropped for the demo (no parent accounts).
 
+### M9: real accounts and merge into `main` (checklist, filled as it goes)
+
+| # | Module | Status | Notes |
+|---|---|---|---|
+| C1 | Merge `main` into `backend` | ✅ | conflicts: `package.json` (union), lockfile (regenerated), `api-mock.ts` (redesign kept + new contract fields) |
+| A1 | Contract: `/auth/signup`, `/auth/login`, `/auth/logout`, `/auth/me`; error code `unauthorized` | ✅ | ADR 0004 |
+| A2 | Auth providers (Supabase Auth, in-memory) and httpOnly cookie sessions with refresh | ✅ | fresh Supabase client per auth call; token check cached 60 s |
+| A3 | Session required on every `/api` route; cross-site POSTs refused | ✅ | `route()` / `publicRoute()` |
+| A4 | Migration `0007`: owner on child and book; access checks through the child | ✅ | `access.ts`; others' ids → 404 |
+| A5 | Services and routes act only on the signed-in parent's data | ✅ | |
+| A6 | Auth routes with rate limits | ✅ | login 10 burst + 5/min, signup 5 + 1/min |
+| A7 | Tests: 401s, isolation between parents, refresh; SQL test | ✅ | 98 tests; `0007` SQL test |
+| B1 | `api.ts`: auth methods; 401 → `/login` | ⏳ | |
+| B2 | Sign-up calls the API; "email already registered" | ⏳ | |
+| B3 | Sign-in checks the password on the server | ⏳ | |
+| B4 | Sign-out calls the API | ⏳ | |
+| B5 | Route guard confirms the session with `/auth/me` | ⏳ | |
+| B6 | "Try again" → `retryLesson` | ⏳ | |
+| B7 | Results show backend `feedback` | ⏳ | |
+| B8 | Minutes from `estimatedMinutes` | ⏳ | |
+| B9 | Mock mode: auth routes, retry, new fields | 🟡 | new fields done in C1; auth and retry routes to do |
+| C2 | Checks: types, lint, tests, SQL, build, HTTP smoke | ⏳ | |
+| C3 | Merge `backend` into `main` (local; push on approval) | ⏳ | |
+
 ### Verification at the end of M7
 
 | Check | Result |
@@ -241,7 +265,7 @@ Not verified from here: the Supabase store against a real project (only type-che
 
 ## 6. How to run
 
-1. Supabase: apply `0001` → `0006` in order; create a **private** storage bucket `books`.
+1. Supabase: apply `0001` → `0007` in order; create a **private** storage bucket `books`.
 2. `cp web/.env.example web/.env.local` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`.
 3. Frontend on the real API: `NEXT_PUBLIC_API_MOCK=false`.
 4. Without a database or key: `STORE=memory AI_MODE=fake npm run dev`.

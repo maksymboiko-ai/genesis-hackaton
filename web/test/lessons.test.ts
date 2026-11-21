@@ -9,7 +9,7 @@ import { flushBackground } from "@/lib/server/background";
 import { checkLessonContent } from "@/lib/server/lessons";
 import { chunksForLesson } from "@/lib/server/retrieval";
 import type { LessonRow } from "@/lib/server/store/types";
-import { call, jsonRequest, memory } from "./helpers";
+import { call, jsonRequest, memory, parent } from "./helpers";
 
 async function setup(bookId: string | null = null) {
   const child = await call(createChild, jsonRequest("POST", "/api/children", { name: "Mia", gradeLevel: 5 }));
@@ -154,6 +154,7 @@ describe("retrieval", () => {
   function seedBook(sectionSizes: number[]) {
     const bookId = crypto.randomUUID();
     memory().data.books.push({
+      ownerId: parent.user.id,
       id: bookId,
       title: "B",
       storagePath: "books/b.pdf",

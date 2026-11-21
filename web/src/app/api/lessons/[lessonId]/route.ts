@@ -12,9 +12,9 @@ const Params = z.object({ lessonId: Id });
 
 // GET /api/lessons/:lessonId — poll until contentStatus is "ready" or "failed".
 export const GET = route(
-  async (_req: Request, ctx: { params: Promise<{ lessonId: string }> }) => {
+  async (_req: Request, ctx: { params: Promise<{ lessonId: string }> }, user) => {
     const { lessonId } = parseWith(Params, await ctx.params);
-    return ok(GetLessonResponse, await getLesson(lessonId));
+    return ok(GetLessonResponse, await getLesson(user, lessonId));
   },
   { limit: LIMITS.read },
 );

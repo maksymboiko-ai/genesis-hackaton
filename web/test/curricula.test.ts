@@ -5,7 +5,7 @@ import { GET as getCurriculum } from "@/app/api/curricula/[curriculumId]/route";
 import { CreateCurriculumResponse, GetCurriculumResponse } from "@/contracts/api";
 import { fakeAi } from "@/lib/server/ai-fake";
 import { MAX_OUTLINE_LESSONS, validateOutline } from "@/lib/server/curricula";
-import { call, jsonRequest, memory } from "./helpers";
+import { call, jsonRequest, memory, parent } from "./helpers";
 
 async function newChild() {
   const res = await call(createChild, jsonRequest("POST", "/api/children", { name: "Mia", gradeLevel: 5 }));
@@ -100,7 +100,7 @@ describe("POST /api/curricula", () => {
     expect((await post({ ...body, childId: crypto.randomUUID(), bookId: null })).status).toBe(404);
     expect((await post({ ...body, childId, bookId: crypto.randomUUID() })).status).toBe(404);
     const bookId = crypto.randomUUID();
-    memory().data.books.push({ id: bookId, title: "B", storagePath: "books/x.pdf", status: "processing", sections: [] });
+    memory().data.books.push({ ownerId: parent.user.id, id: bookId, title: "B", storagePath: "books/x.pdf", status: "processing", sections: [] });
     const notReady = await post({ ...body, childId, bookId });
     expect(notReady.status).toBe(409);
     expect(notReady.body.error.code).toBe("conflict");
@@ -110,6 +110,7 @@ describe("POST /api/curricula", () => {
     const childId = await newChild();
     const bookId = crypto.randomUUID();
     memory().data.books.push({
+      ownerId: parent.user.id,
       id: bookId,
       title: "B",
       storagePath: "books/x.pdf",

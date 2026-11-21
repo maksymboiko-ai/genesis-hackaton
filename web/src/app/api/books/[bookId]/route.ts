@@ -9,9 +9,9 @@ const Params = z.object({ bookId: Id });
 
 // GET /api/books/:bookId — poll until status is "ready" or "failed".
 export const GET = route(
-  async (_req: Request, ctx: { params: Promise<{ bookId: string }> }) => {
+  async (_req: Request, ctx: { params: Promise<{ bookId: string }> }, user) => {
     const { bookId } = parseWith(Params, await ctx.params);
-    return ok(GetBookResponse, await getBook(bookId));
+    return ok(GetBookResponse, await getBook(user, bookId));
   },
   { limit: LIMITS.read },
 );

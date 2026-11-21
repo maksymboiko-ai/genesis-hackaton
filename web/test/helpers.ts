@@ -2,16 +2,34 @@ import { POST as createChild } from "@/app/api/children/route";
 import { POST as createCurriculum } from "@/app/api/curricula/route";
 import { POST as submit } from "@/app/api/lessons/[lessonId]/attempts/route";
 import { LessonContent } from "@/contracts/domain";
+import { ACCESS_COOKIE, getAuth, type AuthUser } from "@/lib/server/auth";
 import { flushBackground } from "@/lib/server/background";
 import { getStore } from "@/lib/server/store";
 import { MemoryStore } from "@/lib/server/store/memory";
 
 type Handler = (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>;
 
+// The signed-in parent for test requests (set before each test in setup.ts).
+export const parent: { user: AuthUser; cookie: string } = { user: { id: "", email: "", name: "" }, cookie: "" };
+
+export async function signUpParent(email: string, name = "Parent") {
+  const { user, session } = await getAuth().signUp({ name, email, password: "correct horse battery" });
+  return { user, cookie: `${ACCESS_COOKIE}=${session.accessToken}`, session };
+}
+
+export async function signInTestParent() {
+  const p = await signUpParent("parent@example.com", "Test Parent");
+  parent.user = p.user;
+  parent.cookie = p.cookie;
+}
+
+/** A JSON request, signed in as the test parent unless `cookie` is given (use "" for none). */
 export function jsonRequest(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
+  const withAuth: Record<string, string> = "cookie" in headers ? { ...headers } : { cookie: parent.cookie, ...headers };
+  if (withAuth.cookie === "") delete withAuth.cookie;
   return new Request(`http://localhost${path}`, {
     method,
-    headers: body === undefined ? headers : { "content-type": "application/json", ...headers },
+    headers: body === undefined ? withAuth : { "content-type": "application/json", ...withAuth },
     body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body),
   });
 }

@@ -20,11 +20,49 @@ import {
 // Every non-2xx response has this body.
 export const ApiError = z.object({
   error: z.object({
-    code: z.enum(["bad_request", "not_found", "conflict", "internal"]),
+    // unauthorized: no valid session (401), or a cross-site request (403).
+    code: z.enum(["bad_request", "unauthorized", "not_found", "conflict", "internal"]),
     message: z.string(),
   }),
 });
 export type ApiError = z.infer<typeof ApiError>;
+
+// --- Accounts ---------------------------------------------------------------
+// Parents sign up and sign in through these endpoints; the session lives in
+// two httpOnly cookies set by the server (sb-access, sb-refresh, Path=/api),
+// so the browser sends it with every /api request and JavaScript never sees
+// the tokens. Every other endpoint needs a session and answers 401
+// "unauthorized" without one. A parent only ever sees their own children,
+// curricula, lessons and books; anything else is "not_found".
+
+export const AuthUser = z.object({
+  id: Id,
+  email: z.string(),
+  name: z.string(),
+});
+export type AuthUser = z.infer<typeof AuthUser>;
+
+// POST /auth/signup — creates the account and signs in.
+export const SignUpRequest = z.object({
+  name: z.string().trim().min(1).max(100),
+  email: z.email().max(254),
+  password: z.string().min(8).max(72),
+});
+export type SignUpRequest = z.infer<typeof SignUpRequest>;
+
+// POST /auth/login
+export const LoginRequest = z.object({
+  email: z.email().max(254),
+  password: z.string().min(1).max(72),
+});
+export type LoginRequest = z.infer<typeof LoginRequest>;
+
+// Response of signup, login and GET /auth/me.
+export const AuthResponse = z.object({ user: AuthUser });
+export type AuthResponse = z.infer<typeof AuthResponse>;
+
+// POST /auth/logout — ends the session and clears the cookies. No body.
+export const LogoutResponse = z.object({ ok: z.literal(true) });
 
 // --- Children -------------------------------------------------------------
 

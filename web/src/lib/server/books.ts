@@ -2,9 +2,11 @@ import "server-only";
 import { z } from "zod";
 import type { PreparedBook } from "@/contracts/ai";
 import type { Book, BookSection } from "@/contracts/domain";
+import { ownedBook } from "./access";
 import { getAi } from "./ai";
+import type { AuthUser } from "./auth";
 import { runInBackground } from "./background";
-import { badRequest, notFound, tooLarge, unsupported } from "./errors";
+import { badRequest, tooLarge, unsupported } from "./errors";
 import { parseWith } from "./http";
 import { extractPdfText, isPdf, MAX_PDF_BYTES } from "./pdf";
 import { assertEmbedding } from "./retrieval";
@@ -23,7 +25,7 @@ const toBook = (row: BookRow): Book => ({ id: row.id, title: row.title, status: 
 const Fields = z.object({ title: z.string().trim().min(1).max(200) });
 
 /** POST /books: validates and stores the PDF, responds, ingests in the background. */
-export async function uploadBook(req: Request): Promise<Book> {
+export async function uploadBook(user: AuthUser, req: Request): Promise<Book> {
   const type = req.headers.get("content-type")?.toLowerCase() ?? "";
   if (!type.startsWith("multipart/form-data")) throw unsupported("Expected multipart/form-data.");
   const declared = Number(req.headers.get("content-length") ?? "0");
@@ -49,7 +51,7 @@ export async function uploadBook(req: Request): Promise<Book> {
   // Server-generated path: the client file name never reaches storage.
   const storagePath = `books/${crypto.randomUUID()}.pdf`;
   await store.uploadFile(storagePath, bytes, "application/pdf");
-  const book = await store.createBook({ title: cleanText(title, 200), storagePath });
+  const book = await store.createBook({ ownerId: user.id, title: cleanText(title, 200), storagePath });
   runInBackground(`book ${book.id}`, () => ingestBook(book.id));
   return toBook(book);
 }
@@ -93,12 +95,11 @@ export async function ingestBook(bookId: string): Promise<void> {
   }
 }
 
-export async function listBooks(): Promise<Book[]> {
-  return (await getStore().listBooks()).map(toBook);
+/** The signed-in parent's books. */
+export async function listBooks(user: AuthUser): Promise<Book[]> {
+  return (await getStore().listBooks(user.id)).map(toBook);
 }
 
-export async function getBook(id: string): Promise<Book> {
-  const book = await getStore().getBook(id);
-  if (!book) throw notFound("Book");
-  return toBook(book);
+export async function getBook(user: AuthUser, id: string): Promise<Book> {
+  return toBook(await ownedBook(user, id));
 }

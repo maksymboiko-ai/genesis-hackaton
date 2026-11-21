@@ -9,9 +9,11 @@ import { LIMITS } from "@/lib/server/rate-limit";
 export const maxDuration = 60;
 
 // POST /api/books — multipart/form-data: title, file (PDF)
-export const POST = route(async (req: Request) => ok(CreateBookResponse, await uploadBook(req), 201), {
+export const POST = route(async (req: Request, _ctx, user) => ok(CreateBookResponse, await uploadBook(user, req), 201), {
   limit: LIMITS.book,
 });
 
 // GET /api/books
-export const GET = route(async () => ok(ListBooksResponse, { books: await listBooks() }), { limit: LIMITS.read });
+export const GET = route(async (_req, _ctx, user) => ok(ListBooksResponse, { books: await listBooks(user) }), {
+  limit: LIMITS.read,
+});

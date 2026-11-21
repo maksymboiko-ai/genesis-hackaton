@@ -12,9 +12,9 @@ const Params = z.object({ lessonId: Id });
 
 // POST /api/lessons/:lessonId/retry — "Try again" for a failed lesson.
 export const POST = route(
-  async (_req: Request, ctx: { params: Promise<{ lessonId: string }> }) => {
+  async (_req: Request, ctx: { params: Promise<{ lessonId: string }> }, user) => {
     const { lessonId } = parseWith(Params, await ctx.params);
-    return ok(RetryLessonResponse, await retryLesson(lessonId));
+    return ok(RetryLessonResponse, await retryLesson(user, lessonId));
   },
   { limit: LIMITS.retry },
 );

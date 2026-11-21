@@ -65,17 +65,17 @@ export class MemoryStore implements Store {
 
   async ping() {}
 
-  async createChild(input: { name: string; gradeLevel: number }) {
+  async createChild(input: { ownerId: string; name: string; gradeLevel: number }) {
     if (!Number.isInteger(input.gradeLevel) || input.gradeLevel < 1 || input.gradeLevel > 12) {
       throw new Error("check violation: grade_level");
     }
-    const row = { id: uuid(), name: input.name, gradeLevel: input.gradeLevel, notes: "", createdAt: now() };
+    const row = { id: uuid(), ownerId: input.ownerId, name: input.name, gradeLevel: input.gradeLevel, notes: "", createdAt: now() };
     this.data.children.push(row);
     return copy(strip(row));
   }
 
-  async listChildren() {
-    return [...this.data.children].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((c) => copy(strip(c)));
+  async listChildren(ownerId: string) {
+    return this.data.children.filter((c) => c.ownerId === ownerId).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((c) => copy(strip(c)));
   }
 
   async getChild(id: string) {
@@ -92,9 +92,10 @@ export class MemoryStore implements Store {
     return copy(this.data.mastery.filter((m) => m.childId === childId));
   }
 
-  async createBook(input: { title: string; storagePath: string }) {
+  async createBook(input: { ownerId: string; title: string; storagePath: string }) {
     const row: BookRow & { createdAt: string } = {
       id: uuid(),
+      ownerId: input.ownerId,
       title: input.title,
       storagePath: input.storagePath,
       status: "processing",
@@ -105,8 +106,9 @@ export class MemoryStore implements Store {
     return copy(strip(row));
   }
 
-  async listBooks() {
-    return [...this.data.books]
+  async listBooks(ownerId: string) {
+    return this.data.books
+      .filter((b) => b.ownerId === ownerId)
       .sort((a, b) => ((b as { createdAt?: string }).createdAt ?? "").localeCompare((a as { createdAt?: string }).createdAt ?? ""))
       .map((b) => copy(strip({ createdAt: "", ...b })));
   }

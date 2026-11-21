@@ -27,10 +27,10 @@ const Body = SubmitAttemptRequest.extend({
 
 // POST /api/lessons/:lessonId/attempts
 export const POST = route(
-  async (req: Request, ctx: { params: Promise<{ lessonId: string }> }) => {
+  async (req: Request, ctx: { params: Promise<{ lessonId: string }> }, user) => {
     const { lessonId } = parseWith(Params, await ctx.params);
     const body = await parseJson(req, Body);
-    return ok(SubmitAttemptResponse, await submitAttempt(lessonId, body), 201);
+    return ok(SubmitAttemptResponse, await submitAttempt(user, lessonId, body), 201);
   },
   { limit: LIMITS.attempt },
 );

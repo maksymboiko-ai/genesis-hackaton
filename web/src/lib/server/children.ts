@@ -1,5 +1,6 @@
 import "server-only";
 import type { CreateChildRequest } from "@/contracts/api";
+import type { AuthUser } from "./auth";
 import { SkillSlug, type Child, type LearnerProfile } from "@/contracts/domain";
 import { badRequest, notFound } from "./errors";
 import { getStore } from "./store";
@@ -12,16 +13,18 @@ export const MAX_NOTES = 2000;
 
 const toChild = (row: ChildRow): Child => ({ id: row.id, name: row.name, gradeLevel: row.gradeLevel });
 
-export async function createChild(input: CreateChildRequest): Promise<Child> {
+export async function createChild(user: AuthUser, input: CreateChildRequest): Promise<Child> {
   const name = cleanText(input.name, MAX_CHILD_NAME);
   if (!name) throw badRequest("Invalid fields: name.");
-  return toChild(await getStore().createChild({ name, gradeLevel: input.gradeLevel }));
+  return toChild(await getStore().createChild({ ownerId: user.id, name, gradeLevel: input.gradeLevel }));
 }
 
-export async function listChildren(): Promise<Child[]> {
-  return (await getStore().listChildren()).map(toChild);
+/** The signed-in parent's children. */
+export async function listChildren(user: AuthUser): Promise<Child[]> {
+  return (await getStore().listChildren(user.id)).map(toChild);
 }
 
+/** Internal (background jobs): the child, whoever owns it. Routes use access.ownedChild. */
 export async function requireChild(childId: string): Promise<ChildRow> {
   const child = await getStore().getChild(childId);
   if (!child) throw notFound("Child");

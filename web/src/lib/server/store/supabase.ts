@@ -19,14 +19,28 @@ function check(error: PostgrestError | null, what: string): void {
   if (error) throw new Error(`db ${what}: ${error.code} ${error.message}`);
 }
 
-type ChildDb = { id: string; name: string; grade_level: number; notes: string };
-const CHILD_COLUMNS = "id, name, grade_level, notes";
-const toChild = (r: ChildDb): ChildRow => ({ id: r.id, name: r.name, gradeLevel: r.grade_level, notes: r.notes });
+type ChildDb = { id: string; owner_id: string | null; name: string; grade_level: number; notes: string };
+const CHILD_COLUMNS = "id, owner_id, name, grade_level, notes";
+const toChild = (r: ChildDb): ChildRow => ({
+  id: r.id,
+  ownerId: r.owner_id,
+  name: r.name,
+  gradeLevel: r.grade_level,
+  notes: r.notes,
+});
 
-type BookDb = { id: string; title: string; storage_path: string; status: BookRow["status"]; sections: unknown };
-const BOOK_COLUMNS = "id, title, storage_path, status, sections";
+type BookDb = {
+  id: string;
+  owner_id: string | null;
+  title: string;
+  storage_path: string;
+  status: BookRow["status"];
+  sections: unknown;
+};
+const BOOK_COLUMNS = "id, owner_id, title, storage_path, status, sections";
 const toBook = (r: BookDb): BookRow => ({
   id: r.id,
+  ownerId: r.owner_id,
   title: r.title,
   storagePath: r.storage_path,
   status: r.status,
@@ -154,18 +168,18 @@ export class SupabaseStore implements Store {
     check(error, "ping");
   }
 
-  async createChild(input: { name: string; gradeLevel: number }) {
+  async createChild(input: { ownerId: string; name: string; gradeLevel: number }) {
     const { data, error } = await this.db
       .from("child")
-      .insert({ name: input.name, grade_level: input.gradeLevel })
+      .insert({ owner_id: input.ownerId, name: input.name, grade_level: input.gradeLevel })
       .select(CHILD_COLUMNS)
       .single();
     check(error, "insert child");
     return toChild(data as ChildDb);
   }
 
-  async listChildren() {
-    const { data, error } = await this.db.from("child").select(CHILD_COLUMNS).order("created_at");
+  async listChildren(ownerId: string) {
+    const { data, error } = await this.db.from("child").select(CHILD_COLUMNS).eq("owner_id", ownerId).order("created_at");
     check(error, "list child");
     return (data as ChildDb[]).map(toChild);
   }
@@ -197,18 +211,22 @@ export class SupabaseStore implements Store {
     }));
   }
 
-  async createBook(input: { title: string; storagePath: string }) {
+  async createBook(input: { ownerId: string; title: string; storagePath: string }) {
     const { data, error } = await this.db
       .from("book")
-      .insert({ title: input.title, storage_path: input.storagePath })
+      .insert({ owner_id: input.ownerId, title: input.title, storage_path: input.storagePath })
       .select(BOOK_COLUMNS)
       .single();
     check(error, "insert book");
     return toBook(data as BookDb);
   }
 
-  async listBooks() {
-    const { data, error } = await this.db.from("book").select(BOOK_COLUMNS).order("created_at", { ascending: false });
+  async listBooks(ownerId: string) {
+    const { data, error } = await this.db
+      .from("book")
+      .select(BOOK_COLUMNS)
+      .eq("owner_id", ownerId)
+      .order("created_at", { ascending: false });
     check(error, "list book");
     return (data as BookDb[]).map(toBook);
   }

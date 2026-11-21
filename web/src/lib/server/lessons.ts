@@ -1,10 +1,12 @@
 import "server-only";
 import type { GetLessonResponse } from "@/contracts/api";
 import { CHOICES_PER_QUESTION, LessonContent, SkillSlug, type Question } from "@/contracts/domain";
+import { ownedLesson } from "./access";
 import { getAi } from "./ai";
+import type { AuthUser } from "./auth";
 import { runInBackground } from "./background";
 import { buildLearnerProfile } from "./children";
-import { notFound } from "./errors";
+
 import { toLessonSummary } from "./mappers";
 import { chunksForLesson } from "./retrieval";
 import { getStore } from "./store";
@@ -128,10 +130,9 @@ function needsGeneration(row: LessonRow): boolean {
  * GET /lessons/:id. Starts generation when the content is pending, stuck, or
  * failed longer ago than the retry cooldown. Never returns correctIndex or explanation.
  */
-export async function getLesson(lessonId: string): Promise<GetLessonResponse> {
+export async function getLesson(user: AuthUser, lessonId: string): Promise<GetLessonResponse> {
   const store = getStore();
-  let row = await store.getLesson(lessonId);
-  if (!row) throw notFound("Lesson");
+  let row = (await ownedLesson(user, lessonId)).lesson;
   if (needsGeneration(row) && (await startLessonGeneration(row.id))) {
     row = (await store.getLesson(lessonId)) ?? row;
   }
@@ -139,10 +140,9 @@ export async function getLesson(lessonId: string): Promise<GetLessonResponse> {
 }
 
 /** POST /lessons/:id/retry: "Try again" on a failed lesson, without the cooldown. */
-export async function retryLesson(lessonId: string): Promise<GetLessonResponse> {
+export async function retryLesson(user: AuthUser, lessonId: string): Promise<GetLessonResponse> {
   const store = getStore();
-  let row = await store.getLesson(lessonId);
-  if (!row) throw notFound("Lesson");
+  let row = (await ownedLesson(user, lessonId)).lesson;
   const retryable =
     row.contentStatus === "failed" || row.contentStatus === "pending" || needsGeneration(row);
   if (retryable && (await startLessonGeneration(row.id, true))) {

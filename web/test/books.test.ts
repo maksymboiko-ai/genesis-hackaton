@@ -8,7 +8,7 @@ import { fakeAi } from "@/lib/server/ai-fake";
 import { flushBackground } from "@/lib/server/background";
 import { checkPreparedBook } from "@/lib/server/books";
 import { extractPdfText, isPdf } from "@/lib/server/pdf";
-import { call, jsonRequest, memory } from "./helpers";
+import { call, jsonRequest, memory, parent } from "./helpers";
 import { makePdf } from "./pdf-fixture";
 
 const BOOK = makePdf([
@@ -21,7 +21,7 @@ function form(fields: { title?: string; file?: Blob; name?: string }) {
   if (fields.title !== undefined) f.set("title", fields.title);
   if (fields.file) f.set("file", fields.file, fields.name ?? "book.pdf");
   // A fresh client IP per request keeps the upload rate limit out of these tests.
-  return new Request("http://localhost/api/books", { method: "POST", body: f, headers: { "x-forwarded-for": crypto.randomUUID() } });
+  return new Request("http://localhost/api/books", { method: "POST", body: f, headers: { "x-forwarded-for": crypto.randomUUID(), cookie: parent.cookie } });
 }
 
 const pdfBlob = (bytes: Uint8Array = BOOK, type = "application/pdf") => new Blob([bytes as BlobPart], { type });
@@ -86,7 +86,7 @@ describe("POST /api/books", () => {
     expect((await call(uploadBook, jsonRequest("POST", "/api/books", { title: "x" }, { "x-forwarded-for": "json" }))).status).toBe(415);
     const big = new Request("http://localhost/api/books", {
       method: "POST",
-      headers: { "content-type": "multipart/form-data; boundary=x", "content-length": String(30 * 1024 * 1024), "x-forwarded-for": "big" },
+      headers: { "content-type": "multipart/form-data; boundary=x", "content-length": String(30 * 1024 * 1024), "x-forwarded-for": "big", cookie: parent.cookie },
       body: "--x--",
     });
     expect((await call(uploadBook, big)).status).toBe(413);
@@ -122,7 +122,7 @@ describe("POST /api/books", () => {
     for (let i = 0; i < 7; i++) {
       const f = new FormData();
       f.set("title", "x");
-      statuses.push((await call(uploadBook, new Request("http://localhost/api/books", { method: "POST", body: f, headers: { "x-forwarded-for": "same" } }))).status);
+      statuses.push((await call(uploadBook, new Request("http://localhost/api/books", { method: "POST", body: f, headers: { "x-forwarded-for": "same", cookie: parent.cookie } }))).status);
     }
     expect(statuses.slice(-1)[0]).toBe(429);
   });

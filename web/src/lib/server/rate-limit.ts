@@ -45,4 +45,7 @@ export const LIMITS = {
   // Each retry is a paid model call.
   retry: { name: "retry", capacity: 5, perMinute: 2 },
   book: { name: "book", capacity: 5, perMinute: 1 },
+  // Password guessing: a few tries, then one every 12 seconds per IP.
+  login: { name: "login", capacity: 10, perMinute: 5 },
+  signup: { name: "signup", capacity: 5, perMinute: 1 },
 } satisfies Record<string, RateLimitRule>;

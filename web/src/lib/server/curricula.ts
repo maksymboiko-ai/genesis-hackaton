@@ -8,8 +8,10 @@ import {
   type Clarification,
   type Curriculum,
 } from "@/contracts/domain";
+import { ownedBook, ownedChild, ownedCurriculum } from "./access";
 import { getAi } from "./ai";
-import { buildLearnerProfile, knownSkillsOf, requireChild } from "./children";
+import type { AuthUser } from "./auth";
+import { buildLearnerProfile, knownSkillsOf } from "./children";
 import { badRequest, conflict, notFound, upstream } from "./errors";
 import { startLessonGeneration } from "./lessons";
 import { toCurriculum, toCurriculumListItem } from "./mappers";
@@ -77,24 +79,23 @@ function cleanClarifications(items: Clarification[]): Clarification[] {
     .filter((c) => c.question && c.answer);
 }
 
-/** Loads a book for planning: must exist and be ready. */
-async function bookSectionsFor(bookId: string | null): Promise<BookSection[]> {
+/** Loads a book for planning: must be the parent's own and ready. */
+async function bookSectionsFor(user: AuthUser, bookId: string | null): Promise<BookSection[]> {
   if (!bookId) return [];
-  const book = await getStore().getBook(bookId);
-  if (!book) throw notFound("Book");
+  const book = await ownedBook(user, bookId);
   if (book.status !== "ready") throw conflict("The book is not ready yet.");
   const sections = z.array(BookSection).safeParse(book.sections);
   if (!sections.success) throw new Error(`book ${book.id} has an invalid section map`);
   return sections.data;
 }
 
-export async function createCurriculum(body: CreateCurriculumRequest): Promise<CreateCurriculumResponse> {
+export async function createCurriculum(user: AuthUser, body: CreateCurriculumRequest): Promise<CreateCurriculumResponse> {
   const prompt = cleanText(body.prompt, 2000);
   if (!prompt) throw badRequest("Invalid fields: prompt.");
   const clarifications = cleanClarifications(body.clarifications);
 
-  await requireChild(body.childId);
-  const bookSections = await bookSectionsFor(body.bookId);
+  await ownedChild(user, body.childId);
+  const bookSections = await bookSectionsFor(user, body.bookId);
   const learner = await buildLearnerProfile(body.childId);
 
   const result = await getAi().generateOutline({
@@ -132,9 +133,15 @@ export async function createCurriculum(body: CreateCurriculumRequest): Promise<C
   return { status: "created", curriculum: await getCurriculum(id) };
 }
 
-export async function listCurricula(childId: string) {
-  await requireChild(childId);
+export async function listCurricula(user: AuthUser, childId: string) {
+  await ownedChild(user, childId);
   return (await getStore().listCurricula(childId)).map(toCurriculumListItem);
+}
+
+/** GET /curricula/:id for the signed-in parent. */
+export async function getOwnedCurriculum(user: AuthUser, id: string): Promise<Curriculum> {
+  await ownedCurriculum(user, id);
+  return getCurriculum(id);
 }
 
 export async function getCurriculum(id: string): Promise<Curriculum> {
