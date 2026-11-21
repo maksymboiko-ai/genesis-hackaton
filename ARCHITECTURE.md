@@ -189,7 +189,7 @@ To stop skill names drifting ("linear-equations" and "solving-linear-equations")
 
 ### Textbook grounding (RAG)
 
-1. Frontend uploads a PDF with `POST /api/books`. Backend stores the file and responds with `status: 'processing'`.
+1. Frontend uploads a PDF in three requests, because a request to an API route on Vercel is capped at 4.5 MB and a textbook is larger: `POST /api/books/uploads` returns an `uploadId` and a short-lived `uploadUrl` in file storage; the browser sends the file there with `PUT`; `POST /api/books` with the title and the `uploadId` then checks the stored file (a PDF of 20 MB or less) and responds with `status: 'processing'`.
 2. In the background the backend extracts the text and calls `prepareBook`. The AI module splits the text into chunks at headings, asks a model for the book map (the ordered list of sections, each with a chapter, a title and a summary), assigns every chunk to a section and embeds the chunks. Backend stores the map in `book.sections` and the chunks in `book_chunk`.
 3. **A curriculum is planned from the map, not from a similarity search.** The nearest few chunks to a goal are scattered passages; the map is the book's actual structure. `generateOutline` receives the whole map as `bookSections` and ties each lesson to one section.
 4. **A lesson is written from its section.** If the section has at most `LESSON_CHUNK_LIMIT` chunks, the backend passes all of them. Otherwise it embeds the lesson's title and objective and calls `match_book_chunks` with the section index for the nearest `LESSON_CHUNK_LIMIT`. Either way the chunks go into `sourceChunks` in reading order (by `chunk_index`).

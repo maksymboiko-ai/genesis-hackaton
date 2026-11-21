@@ -81,7 +81,8 @@ lines, move logic into `lib/server/`.
 |---|---|
 | `POST /children` | `CreateChildRequest` → insert → `Child` |
 | `GET /children/:childId/profile` | build `LearnerProfile` from `child.notes` + `skill_mastery` |
-| `POST /books` | multipart; validate PDF (see security skill), store, respond `processing`; in `after()` extract text → `prepareBook` → store `sections` + chunks |
+| `POST /books/uploads` | no body; respond `uploadId` + a signed storage `uploadUrl` the browser PUTs the PDF to (a route cannot take it: Vercel caps requests at 4.5 MB) |
+| `POST /books` | `{ title, uploadId }`; validate the stored PDF (see security skill), respond `processing`; in `after()` extract text → `prepareBook` → store `sections` + chunks |
 | `POST /curricula` | validate `bookId` exists and is `ready`; pass `clarifications` and the book map (`bookSections`) to `generateOutline`; result `questions` → respond `{ status: "needs_clarification" }` and store nothing; `outline` → store curriculum + lessons with `book_section_index`, respond `{ status: "created", curriculum }`, first lesson in `after()` |
 | `GET /curricula/:id` | lessons ordered by `position`; replan events by `created_at` |
 | `GET /lessons/:id` | if `pending` → claim + generate in `after()` with chunks from the lesson's book section (see `backend-data-access`); response through `GetLessonResponse` (no answers) |

@@ -68,7 +68,7 @@ function wrap<K extends keyof AiService>(name: K): AiService[K] {
       return result;
     } catch (err) {
       if (err instanceof HttpError) throw err;
-      console.error(`[ai] ${name} failed`, err);
+      console.error("[ai] %s failed", name, err);
       throw upstream();
     }
   }) as AiService[K];

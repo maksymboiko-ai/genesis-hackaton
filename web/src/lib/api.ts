@@ -3,6 +3,7 @@ import {
   ApiError,
   AuthResponse,
   CreateBookResponse,
+  CreateBookUploadResponse,
   CreateChildResponse,
   CreateCurriculumResponse,
   ExtendCurriculumResponse,
@@ -84,11 +85,19 @@ export const api = {
 
   listBooks: () => request(ListBooksResponse, '/books'),
   getBook: (bookId: string) => request(GetBookResponse, `/books/${bookId}`),
-  createBook: (title: string, file: File) => {
-    const form = new FormData()
-    form.set('title', title)
-    form.set('file', file)
-    return request(CreateBookResponse, '/books', { method: 'POST', body: form })
+  createBook: async (title: string, file: File) => {
+    const { uploadId, uploadUrl } = await request(CreateBookUploadResponse, '/books/uploads', { method: 'POST' })
+    // The file goes straight to storage, not through /api: a request to an
+    // API route is capped at 4.5 MB on Vercel. The mock has no storage.
+    if (!USE_MOCK) {
+      const sent = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: file,
+      }).catch(() => null)
+      if (!sent?.ok) throw new ApiRequestError('internal', 'The upload did not go through. Try again.')
+    }
+    return request(CreateBookResponse, '/books', post({ title, uploadId }))
   },
 
   listCurricula: (childId: string) =>

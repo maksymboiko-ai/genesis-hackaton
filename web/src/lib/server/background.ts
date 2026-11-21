@@ -13,7 +13,7 @@ export function runInBackground(name: string, job: () => Promise<void>): void {
     try {
       await job();
     } catch (err) {
-      console.error(`[background] ${name} failed`, err);
+      console.error("[background] %s failed", name, err);
     }
   };
   if (process.env.VITEST) {

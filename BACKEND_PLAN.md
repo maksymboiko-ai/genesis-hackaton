@@ -110,9 +110,9 @@ A module is **Ready** only when all four steps are done.
 
 | | |
 |---|---|
-| Routes | `POST /api/books` (multipart), `GET /api/books`, `GET /api/books/[bookId]` |
-| Services | `books.ts`: `uploadBook`, `ingestBook` (extract text, `prepareBook`, insert chunks in batches of 100, set `sections`, `ready`) |
-| Rules | ≤ 20 MB, MIME + `%PDF-` magic, storage path `books/<uuid>.pdf`, title 1–200; limits on pages/characters/chunks; any error → `failed`; embedding length check |
+| Routes | `POST /api/books/uploads`, `PUT /api/books/uploads/[uploadId]` (`STORE=memory` only), `POST /api/books` (JSON), `GET /api/books`, `GET /api/books/[bookId]` |
+| Services | `books.ts`: `createBookUpload` (signed upload URL), `createBook` (checks the stored file), `ingestBook` (extract text, `prepareBook`, insert chunks in batches of 100, set `sections`, `ready`) |
+| Rules | the file goes from the browser straight to storage (Vercel caps a request to a route at 4.5 MB); ≤ 20 MB and `%PDF-` magic checked on the stored file, rejected files removed; storage path `books/<owner id>/<upload id>.pdf`, title 1–200; limits on pages/characters/chunks; any error → `failed`; embedding length check |
 | Tests | non-PDF with `.pdf` name → 415; oversize → 413; prepared book with wrong vector length → `failed` |
 | Smoke | upload small PDF → `processing` → `ready`; create curriculum from it → lessons carry `bookSectionIndex` |
 

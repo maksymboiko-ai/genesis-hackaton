@@ -265,10 +265,32 @@ export class SupabaseStore implements Store {
     if (error) throw new Error(`storage upload: ${error.message}`);
   }
 
+  async createUploadUrl(path: string) {
+    // Valid for 2 hours and for one file: without upsert a second PUT is refused.
+    const { data, error } = await this.db.storage.from(this.booksBucket).createSignedUploadUrl(path);
+    if (error || !data) throw new Error(`storage sign upload: ${error?.message ?? "empty"}`);
+    return data.signedUrl;
+  }
+
+  async fileSize(path: string) {
+    const files = this.db.storage.from(this.booksBucket);
+    // exists() is false only for a missing object and throws on anything else.
+    const { data: found } = await files.exists(path);
+    if (!found) return null;
+    const { data, error } = await files.info(path);
+    if (error || typeof data?.size !== "number") throw new Error(`storage info: ${error?.message ?? "no size"}`);
+    return data.size;
+  }
+
   async downloadFile(path: string) {
     const { data, error } = await this.db.storage.from(this.booksBucket).download(path);
     if (error || !data) throw new Error(`storage download: ${error?.message ?? "empty"}`);
     return new Uint8Array(await data.arrayBuffer());
+  }
+
+  async removeFile(path: string) {
+    const { error } = await this.db.storage.from(this.booksBucket).remove([path]);
+    if (error) throw new Error(`storage remove: ${error.message}`);
   }
 
   async getBook(id: string) {

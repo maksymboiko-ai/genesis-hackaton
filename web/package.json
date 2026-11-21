@@ -10,7 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "evals": "tsx --env-file=../.env evals/run.ts",
-    "evals:rag": "tsx --env-file=../.env evals/retrieval.ts"
+    "evals:rag": "tsx --env-file=../.env evals/retrieval.ts",
+    "evals:judge": "tsx --env-file=../.env evals/judge.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

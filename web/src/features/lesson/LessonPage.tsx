@@ -183,28 +183,26 @@ function Preparing() {
   }, [])
 
   return (
-    <div className="a-fade flex flex-col gap-6">
-      <Mascot pose="reading" size={112} className="a-pulse" />
-      <div className="flex flex-col gap-2.5 rounded-[22px] bg-s-tint p-[18px]" role="status" aria-live="polite">
-        <p className="lt next">Writing your lesson…</p>
-        {STAGES.map((text, index) =>
-          index > stage ? null : (
-            <span key={text} className={`sm a-rise flex items-center gap-2 text-text! ${index === stage ? 'font-bold!' : ''}`}>
-              {index < stage ? (
-                <Check size={15} strokeWidth={3} className="a-pop text-s-ink" aria-hidden="true" />
-              ) : (
-                <span className="spin text-s-ink" style={{ width: 14, height: 14, borderWidth: 2 }} aria-hidden="true" />
-              )}
-              {text}
-            </span>
-          ),
-        )}
-      </div>
-      <div className="flex flex-col gap-2.5" aria-hidden="true">
-        <span className="sk h-5 w-[55%]" />
-        <span className="sk h-3.5" />
-        <span className="sk h-3.5 w-[85%]" />
-        <span className="sk h-[110px] rounded-[20px]!" />
+    <div className="a-fade flex min-h-[52dvh] flex-col items-center justify-center gap-5 py-6 text-center">
+      <Mascot pose="reading" size={176} className="a-pulse" />
+      <div className="flex flex-col items-center gap-3.5" role="status" aria-live="polite">
+        <h2 className="q" style={{ fontSize: 26 }}>
+          Reading up on your lesson…
+        </h2>
+        <div className="flex flex-col items-start gap-2">
+          {STAGES.map((text, index) =>
+            index > stage ? null : (
+              <span key={text} className={`a-rise flex items-center gap-2.5 text-[16px] ${index === stage ? 'font-bold' : ''}`}>
+                {index < stage ? (
+                  <Check size={17} strokeWidth={3} className="a-pop text-success" aria-hidden="true" />
+                ) : (
+                  <span className="spin text-success" style={{ width: 16, height: 16, borderWidth: 2.5 }} aria-hidden="true" />
+                )}
+                {text}
+              </span>
+            ),
+          )}
+        </div>
       </div>
     </div>
   )

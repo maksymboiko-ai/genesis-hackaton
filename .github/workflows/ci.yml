@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch or pull request replaces the running check.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web (lint, types, tests, build, smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      # Route types (LayoutProps and friends) are generated, not committed.
+      - run: npx next typegen
+      - run: npm run typecheck
+      - run: npm test
+      # Builds without secrets: server env is read lazily (lib/server/env.ts).
+      - run: npm run build
+      - name: Smoke test over HTTP (in-memory store, fake AI)
+        env:
+          STORE: memory
+          AI_MODE: fake
+        run: |
+          npx next start -p 3100 > "$RUNNER_TEMP/next.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3100/api/health > /dev/null && break
+            sleep 1
+          done
+          node scripts/smoke.mjs http://localhost:3100 || { cat "$RUNNER_TEMP/next.log"; exit 1; }
+
+  database:
+    name: Database (migrations, SQL tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create what Supabase provides (roles, auth.users)
+        run: psql -v ON_ERROR_STOP=1 -q -f supabase/tests/setup/plain_postgres.sql
+      - name: Apply migrations
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "== $f"
+            psql -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+      - name: Run SQL tests
+        run: |
+          for f in supabase/tests/*.sql; do
+            echo "== $f"
+            psql -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+  semgrep:
+    name: Semgrep (SAST, secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # Findings go to the repository's Security tab (code scanning).
+      security-events: write
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Community rules, no Semgrep account. Any finding fails the job; paths
+      # left out of the scan are listed in .semgrepignore.
+      - name: Scan
+        run: >-
+          semgrep scan
+          --config p/default
+          --config p/typescript
+          --config p/react
+          --config p/nextjs
+          --config p/secrets
+          --config p/owasp-top-ten
+          --config p/github-actions
+          --metrics=off
+          --error
+          --sarif-output=semgrep.sarif
+      # Pull requests from forks get a read-only token and cannot upload.
+      - name: Upload findings to code scanning
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
