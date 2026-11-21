@@ -4,13 +4,14 @@ import { Mascot } from '@/components/Mascot'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, Check, ChevronLeft, ChevronRight, PencilLine } from 'lucide-react'
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Lock, PencilLine } from 'lucide-react'
 import { Button } from '@/components/Button'
 import { KindIcon, KindTag } from '@/components/KindTag'
 import { SubjectIcon } from '@/components/SubjectTile'
-import { REPLAN_WINDOW } from '@/contracts/domain'
+import { FREE_LESSONS_PER_PLAN, REPLAN_WINDOW } from '@/contracts/domain'
 import type { Curriculum, LessonSummary, ReplanEvent } from '@/contracts/domain'
 import { api } from '@/lib/api'
+import { PRICING } from '@/lib/config'
 import { SUBJECTS, subjectKey, subjectLabel } from '@/lib/subjects'
 import { useResource } from '@/lib/useResource'
 import { KeepGoing } from './KeepGoing'
@@ -64,7 +65,9 @@ function scoreText(score: number | null, questions: number | null) {
   return questions ? `${Math.round(score * questions)}/${questions}` : `${Math.round(score * 100)}%`
 }
 
-type NodeState = 'done' | 'next' | 'prep' | 'up'
+type NodeState = 'done' | 'next' | 'prep' | 'up' | 'locked'
+
+const paywallHref = (curriculumId: string) => `/paywall?plan=${curriculumId}`
 
 function PathNode({ lesson, state, number }: { lesson: LessonSummary; state: NodeState; number: number }) {
   if (state === 'done') {
@@ -75,6 +78,13 @@ function PathNode({ lesson, state, number }: { lesson: LessonSummary; state: Nod
     )
   }
   if (state === 'prep') return <span className="n-prep" />
+  if (state === 'locked') {
+    return (
+      <span className="n-up">
+        <Lock size={14} strokeWidth={2.4} aria-hidden="true" />
+      </span>
+    )
+  }
   const next = state === 'next'
   if (lesson.kind === 'remedial') {
     return (
@@ -128,9 +138,10 @@ function PlanRow({
       </div>
       <div className="flex items-center gap-3 py-3 pr-2">
         <div className="min-w-0 flex-1">
-          <p className={`lt ${state === 'next' ? 'next' : ''} ${state === 'prep' ? 'text-muted' : ''}`}>
+          <p className={`lt ${state === 'next' ? 'next' : ''} ${state === 'prep' || state === 'locked' ? 'text-muted' : ''}`}>
             <span className="sr-only">Lesson {number}: </span>
             {lesson.title}
+            {state === 'locked' && <span className="sr-only"> (locked)</span>}
           </p>
           {meta && (
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -159,7 +170,7 @@ function PlanRow({
         </div>
       ) : (
         <Link
-          href={`/app/lessons/${lesson.id}`}
+          href={lesson.locked ? paywallHref(lesson.curriculumId) : `/app/lessons/${lesson.id}`}
           className={className}
           style={style}
           aria-current={state === 'next' ? 'step' : undefined}
@@ -333,6 +344,30 @@ function UpNextCard({ lesson }: { lesson: LessonSummary }) {
   )
 }
 
+function UnlockCard({ curriculumId, remaining }: { curriculumId: string; remaining: number }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-[22px] bg-s-tint p-[18px]">
+      <span className="cap flex items-center gap-1.5 text-s-ink">
+        <Lock size={14} strokeWidth={2.6} aria-hidden="true" />
+        {remaining === 1 ? '1 lesson locked' : `${remaining} lessons locked`}
+      </span>
+      <div>
+        <h2 className="lt next" style={{ fontSize: 19 }}>
+          Unlock the rest of the plan
+        </h2>
+        <p className="lo" style={{ color: '#3f4452' }}>
+          {FREE_LESSONS_PER_PLAN === 1 ? 'The first lesson is free.' : `The first ${FREE_LESSONS_PER_PLAN} lessons are free.`}{' '}
+          Start the {PRICING.trial} free trial to open the others.
+        </p>
+      </div>
+      <Link href={paywallHref(curriculumId)} className="btn md wide">
+        See the plans
+        <ArrowRight size={19} strokeWidth={2.4} aria-hidden="true" />
+      </Link>
+    </div>
+  )
+}
+
 function DoneCard({
   lessons,
   curriculumId,
@@ -449,6 +484,7 @@ export function CurriculumPage() {
 
   const stateOf = (lesson: LessonSummary, index: number): NodeState => {
     if (lesson.completedAt) return 'done'
+    if (lesson.locked) return 'locked'
     if (lesson === current) return 'next'
     if (lesson.contentStatus === 'generating') return 'prep'
     if (justBuilt && index > currentIndex + 1 && isPreparing(lesson)) return 'prep'
@@ -527,6 +563,8 @@ export function CurriculumPage() {
         <div className="cp-next">
           {adjusting ? (
             <AdjustingCard />
+          ) : current?.locked ? (
+            <UnlockCard curriculumId={curriculum.id} remaining={lessons.filter((lesson) => lesson.locked).length} />
           ) : current ? (
             <UpNextCard lesson={current} />
           ) : (

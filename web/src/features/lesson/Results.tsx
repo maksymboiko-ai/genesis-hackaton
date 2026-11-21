@@ -104,9 +104,12 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
   const adjusted = result.replanTriggered !== null && !adjusting
   const next =
     curriculum?.lessons.find((lesson) => !lesson.completedAt) ??
-    (result.nextLessonId ? { id: result.nextLessonId, title: '', kind: 'core' as const, position: -1 } : null)
+    (result.nextLessonId
+      ? { id: result.nextLessonId, title: '', kind: 'core' as const, position: -1, locked: false }
+      : null)
   const nextNumber = curriculum && next ? curriculum.lessons.findIndex((lesson) => lesson.id === next.id) + 1 : 0
   const planHref = `/app/curricula/${curriculumId}`
+  const unlockHref = `/paywall?plan=${curriculumId}`
   // Only a loaded plan with nothing left counts; an unknown plan does not.
   const finished = curriculum !== null && curriculum.lessons.every((lesson) => lesson.completedAt !== null)
   const good = result.replanTriggered === 'excelling'
@@ -180,6 +183,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
               nextNumber={nextNumber}
               adjusting={adjusting}
               planHref={planHref}
+              unlockHref={unlockHref}
               curriculumId={finished ? curriculumId : undefined}
             />
             <button type="button" className="btn q wide" style={{ height: 44 }} onClick={onRetake}>
@@ -218,6 +222,7 @@ export function Results({ result, questions, curriculum, curriculumId, lessonNum
           nextNumber={nextNumber}
           adjusting={adjusting}
           planHref={planHref}
+          unlockHref={unlockHref}
           curriculumId={finished ? curriculumId : undefined}
           compact
         />
@@ -232,13 +237,16 @@ function NextCard({
   nextNumber,
   adjusting,
   planHref,
+  unlockHref,
   curriculumId,
   compact,
 }: {
-  next: { id: string; title: string; kind: 'core' | 'remedial' | 'retry' | 'extension' } | null
+  next: { id: string; title: string; kind: 'core' | 'remedial' | 'retry' | 'extension'; locked: boolean } | null
   nextNumber: number
   adjusting: boolean
   planHref: string
+  // Where a locked next lesson leads.
+  unlockHref: string
   // Set once the plan is known to be finished: offers "Keep going".
   curriculumId?: string
   compact?: boolean
@@ -274,12 +282,13 @@ function NextCard({
     )
   }
 
-  const label = nextNumber > 0 ? `Start lesson ${nextNumber}` : 'Next lesson'
+  const label = next.locked ? 'Unlock the next lesson' : nextNumber > 0 ? `Start lesson ${nextNumber}` : 'Next lesson'
+  const href = next.locked ? unlockHref : `/app/lessons/${next.id}`
 
   if (compact) {
     return (
       <>
-        <Link href={`/app/lessons/${next.id}`} className="btn wide">
+        <Link href={href} className="btn wide">
           {label}
         </Link>
         <Link href={planHref} className="btn q wide" style={{ height: 44 }}>
@@ -301,7 +310,7 @@ function NextCard({
           {next.title}
         </p>
       )}
-      <Link href={`/app/lessons/${next.id}`} className="btn md wide">
+      <Link href={href} className="btn md wide">
         {label}
       </Link>
       <Link href={planHref} className="btn q wide" style={{ height: 44 }}>
