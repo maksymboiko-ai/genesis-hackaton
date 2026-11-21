@@ -26,6 +26,7 @@ export function toLessonSummary(row: LessonRow): LessonSummary {
     objective: row.objective,
     skills: validSkills(row.skills),
     retryOfLessonId: row.retryOfLessonId,
+    reason: row.reason,
     contentStatus: row.contentStatus,
     completedAt: row.completedAt ? iso(row.completedAt) : null,
     lastScore: row.lastScore,
@@ -38,7 +39,7 @@ export function toReplanEvent(row: ReplanEventRow): ReplanEvent {
     id: row.id,
     curriculumId: row.curriculumId,
     trigger: row.trigger,
-    diagnosis: diagnosis.success ? diagnosis.data : { summary: "", mistakes: [], missingSkills: [] },
+    diagnosis: diagnosis.success ? diagnosis.data : { summary: "", childMessage: "", mistakes: [], missingSkills: [] },
     insertedLessonIds: row.insertedLessonIds,
     createdAt: iso(row.createdAt),
   };

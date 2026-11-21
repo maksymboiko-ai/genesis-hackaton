@@ -9,7 +9,8 @@ alter table lesson add column generation_started_at timestamptz;
 alter table curriculum add column replan_started_at timestamptz;
 
 -- Lesson rows passed as jsonb: [{ kind, title, objective, skills[],
--- retry_of_lesson_id, book_section_index }]. Missing keys use the defaults.
+-- retry_of_lesson_id, book_section_index, reason }]. Missing keys use the
+-- defaults. Needs 0003_explanations.sql (lesson.reason).
 
 -- A new curriculum and its core lessons, at positions 0..n-1.
 create function create_curriculum(
@@ -165,7 +166,7 @@ begin
      and position >= p_insert_at;
 
   with inserted as (
-    insert into lesson (curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, book_section_index)
+    insert into lesson (curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, book_section_index, reason)
     select p_curriculum_id,
            p_insert_at + (l.ord - 1)::int,
            l.value->>'kind',
@@ -173,7 +174,8 @@ begin
            l.value->>'objective',
            coalesce(array(select jsonb_array_elements_text(l.value->'skills')), '{}'),
            (l.value->>'retry_of_lesson_id')::uuid,
-           (l.value->>'book_section_index')::int
+           (l.value->>'book_section_index')::int,
+           l.value->>'reason'
     from jsonb_array_elements(v_lessons) with ordinality as l(value, ord)
     returning id, position
   )

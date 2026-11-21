@@ -9,15 +9,20 @@ describe("grading (pure)", () => {
   const content = {
     bodyMarkdown: "",
     questions: [
-      { id: "a", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 0, explanation: "e", skill: "s-one" },
-      { id: "b", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 1, explanation: "e", skill: "s-one" },
-      { id: "c", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 2, explanation: "e", skill: "s-two" },
+      { id: "a", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 0, explanation: "e", choiceFeedback: ["fa0", "fa1", "fa2", "fa3"], skill: "s-one" },
+      { id: "b", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 1, explanation: "e", choiceFeedback: ["fb0", "fb1", "fb2", "fb3"], skill: "s-one" },
+      { id: "c", prompt: "p", choices: ["1", "2", "3", "4"], correctIndex: 2, explanation: "e", choiceFeedback: ["fc0", "fc1", "fc2", "fc3"], skill: "s-two" },
     ],
   };
 
   it("scores 1 for all correct, 0 for none", () => {
     expect(gradeAttempt(content, [{ questionId: "a", chosenIndex: 0 }, { questionId: "b", chosenIndex: 1 }, { questionId: "c", chosenIndex: 2 }]).score).toBe(1);
     expect(gradeAttempt(content, [{ questionId: "a", chosenIndex: 3 }, { questionId: "b", chosenIndex: 3 }, { questionId: "c", chosenIndex: 3 }]).score).toBe(0);
+  });
+
+  it("returns the feedback for the choice the child picked", () => {
+    const { results } = gradeAttempt(content, [{ questionId: "a", chosenIndex: 0 }, { questionId: "b", chosenIndex: 3 }, { questionId: "c", chosenIndex: 2 }]);
+    expect(results.map((r) => r.explanation)).toEqual(["fa0", "fb3", "fc2"]);
   });
 
   it("rejects unknown, duplicate, missing and out-of-range answers", () => {

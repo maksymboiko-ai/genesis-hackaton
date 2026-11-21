@@ -50,6 +50,7 @@ export function validateOutline(outline: OutlineOutput, sections: BookSection[],
       objective,
       skills,
       retryOfLessonId: null,
+      reason: null,
       bookSectionIndex: index !== null && Number.isInteger(index) && sectionIndexes.has(index) ? index : null,
     });
   }

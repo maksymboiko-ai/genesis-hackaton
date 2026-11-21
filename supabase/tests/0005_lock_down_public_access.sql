@@ -1,4 +1,4 @@
--- Tests for 0004_lock_down_public_access.sql. Needs the Supabase roles; on a
+-- Tests for 0005_lock_down_public_access.sql. Needs the Supabase roles; on a
 -- plain Postgres create them first (see the comment at the bottom).
 begin;
 

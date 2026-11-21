@@ -48,9 +48,13 @@ export function checkLessonContent(content: LessonContent): LessonContent {
     if (!SkillSlug.safeParse(q.skill).success) continue;
     const prompt = cleanText(q.prompt, 1000);
     if (!prompt) continue;
+    const explanation = cleanText(q.explanation, 1000);
+    // Feedback per choice; a missing entry falls back to the explanation.
+    const choiceFeedback = q.choiceFeedback.map((f) => cleanText(f, 600) || explanation);
+    if (choiceFeedback.length !== CHOICES_PER_QUESTION) continue;
     const id = q.id && !seen.has(q.id) ? q.id : crypto.randomUUID();
     seen.add(id);
-    questions.push({ id, prompt, choices, correctIndex: q.correctIndex, explanation: cleanText(q.explanation, 1000), skill: q.skill });
+    questions.push({ id, prompt, choices, correctIndex: q.correctIndex, explanation, choiceFeedback, skill: q.skill });
   }
   if (questions.length === 0) throw new Error("lesson content has no valid questions");
   return LessonContent.parse({ bodyMarkdown: sanitizeMarkdown(content.bodyMarkdown, MAX_BODY_CHARS), questions });

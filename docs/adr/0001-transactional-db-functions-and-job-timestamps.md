@@ -3,7 +3,7 @@
 - **Status:** Proposed. Needs OK from AI and Frontend owners (contract change, see ARCHITECTURE.md "Changing a contract")
 - **Date:** 2026-11-21
 - **Owner:** Backend
-- **Affects:** `supabase/migrations/0003_backend_functions.sql`, `web/src/lib/server/`
+- **Affects:** `supabase/migrations/0004_backend_functions.sql`, `web/src/lib/server/`
 
 ## Context
 
@@ -24,7 +24,7 @@
 
 ## Decision
 
-Add migration `0003_backend_functions.sql` (new file; `0001`/`0002` stay unchanged):
+Add migration `0004_backend_functions.sql` (new file; `0001`/`0002` stay unchanged):
 
 - **Three write functions**, called with `db.rpc(...)`, each one transaction:
   - `create_curriculum(...)`: inserts the curriculum and its lessons, returns the id;
@@ -53,5 +53,5 @@ Add migration `0003_backend_functions.sql` (new file; `0001`/`0002` stay unchang
 - ✅ No change to `contracts/api.ts`: Frontend code is unaffected.
 - ✅ No change to `contracts/ai.ts`: the AI module is unaffected.
 - ⚠️ Some write logic lives in SQL; it must be reviewed together with the TypeScript that calls it.
-- ✅ Tested on Postgres 16 + pgvector: `supabase/tests/0003_backend_functions.sql` (atomicity cases included).
+- ✅ Tested on Postgres 16 + pgvector: `supabase/tests/0004_backend_functions.sql` (atomicity cases included).
 - ⚠️ The migration must be applied to the shared Supabase project before backend modules M2–M5 are deployed.

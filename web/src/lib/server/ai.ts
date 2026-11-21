@@ -57,8 +57,10 @@ function wrap<K extends keyof AiService>(name: K): AiService[K] {
     const fake = getEnv().AI_MODE === "fake";
     const started = Date.now();
     try {
-      const fn = baseService()[name] as (i: unknown, o?: AiCallOptions) => Promise<unknown>;
-      const result = await fn(input, opts);
+      const base = baseService();
+      // Called on the service object: lib/ai methods use `this` (prepareBook calls this.embed).
+      const fn = base[name] as (this: AiService, i: unknown, o?: AiCallOptions) => Promise<unknown>;
+      const result = await fn.call(base, input, opts);
       // The fake makes no model calls; record one so logging is exercised.
       if (fake) opts.onCall!({ task: TASKS[name], model: "fake", latencyMs: Date.now() - started, inputTokens: null, outputTokens: null, ok: true });
       return result;

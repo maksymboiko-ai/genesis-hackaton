@@ -161,6 +161,7 @@ export class MemoryStore implements Store {
       objective: l.objective,
       skills: [...l.skills],
       retryOfLessonId: l.retryOfLessonId,
+      reason: l.reason,
       contentStatus: "pending",
       content: null,
       completedAt: null,
@@ -184,7 +185,7 @@ export class MemoryStore implements Store {
     if (input.lessons.length === 0) throw new Error("p_lessons must be a non-empty array");
     const id = uuid();
     // Build everything first so a bad lesson leaves nothing behind.
-    const lessons = input.lessons.map((l, i) => this.newLessonRow(id, i, { ...l, kind: "core", retryOfLessonId: null }));
+    const lessons = input.lessons.map((l, i) => this.newLessonRow(id, i, { ...l, kind: "core", retryOfLessonId: null, reason: null }));
     this.data.curricula.push({
       id,
       childId: input.childId,

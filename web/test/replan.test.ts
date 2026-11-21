@@ -5,7 +5,7 @@ import { GetCurriculumResponse } from "@/contracts/api";
 import { EXCELLING_FROM, REPLAN_WINDOW, STRUGGLING_BELOW } from "@/contracts/domain";
 import { fakeAi } from "@/lib/server/ai-fake";
 import { flushBackground } from "@/lib/server/background";
-import { decideReplan, MAX_REPLAN_LESSONS, planReplan } from "@/lib/server/replan-plan";
+import { decideReplan, MAX_REPLAN_LESSONS, planReplan, RETRY_REASON } from "@/lib/server/replan-plan";
 import type { LessonRow } from "@/lib/server/store/types";
 import { answers, attempt, call, jsonRequest, memory, readyCurriculum } from "./helpers";
 
@@ -60,6 +60,7 @@ describe("replan placement (pure)", () => {
     objective: "o",
     skills: ["s"],
     retryOfLessonId: null,
+    reason: null,
     contentStatus: "ready",
     content: null,
     completedAt: null,
@@ -81,7 +82,7 @@ describe("replan placement (pure)", () => {
         { lessonId: "l1", score: 0.9 },
         { lessonId: "l0", score: 0.2 },
       ],
-      proposed: [{ title: "Review", objective: "r", skills: ["Missing Skill"] }],
+      proposed: [{ title: "Review", objective: "r", skills: ["Missing Skill"], reason: " Because the sign slipped. " }],
     });
     expect(plan.insertAt).toBe(3);
     expect(plan.rows.map((r) => [r.kind, r.title, r.retryOfLessonId, r.bookSectionIndex])).toEqual([
@@ -90,10 +91,12 @@ describe("replan placement (pure)", () => {
       ["retry", "L2", "l2", 2],
     ]);
     expect(plan.rows[0].skills).toEqual(["missing-skill"]);
+    expect(plan.rows[0].reason).toBe("Because the sign slipped.");
+    expect(plan.rows[1].reason).toBe(RETRY_REASON);
   });
 
   it("excelling: extensions appended at the end, capped", () => {
-    const proposed = Array.from({ length: 10 }, (_, i) => ({ title: `E${i}`, objective: "e", skills: ["x"] }));
+    const proposed = Array.from({ length: 10 }, (_, i) => ({ title: `E${i}`, objective: "e", skills: ["x"], reason: "r" }));
     const plan = planReplan({ trigger: "excelling", lessons, windowAttempts: [], proposed });
     expect(plan.insertAt).toBe(5);
     expect(plan.rows).toHaveLength(MAX_REPLAN_LESSONS);
@@ -129,6 +132,9 @@ describe("self-healing end to end", () => {
     expect(after.replanEvents).toHaveLength(1);
     expect(after.replanEvents[0].trigger).toBe("struggling");
     expect(after.replanEvents[0].diagnosis.missingSkills.length).toBeGreaterThan(0);
+    expect(after.replanEvents[0].diagnosis.childMessage).not.toBe("");
+    expect(after.lessons.filter((l) => l.kind === "core").every((l) => l.reason === null)).toBe(true);
+    expect(after.lessons.filter((l) => l.kind !== "core").every((l) => l.reason)).toBe(true);
     // The first new lesson is generated ahead of time.
     const firstNew = after.lessons.find((l) => l.id === after.replanEvents[0].insertedLessonIds[0])!;
     expect(firstNew.contentStatus).toBe("ready");
@@ -203,8 +209,8 @@ describe("self-healing end to end", () => {
     const { curriculum } = await readyCurriculum();
     const original = fakeAi.replan;
     fakeAi.replan = async () => ({
-      diagnosis: { summary: "s", mistakes: [], missingSkills: ["Bad Slug"] },
-      newLessons: Array.from({ length: 20 }, (_, i) => ({ title: `R${i}`, objective: "r", skills: ["NOT OK"] })),
+      diagnosis: { summary: "s", childMessage: "c", mistakes: [], missingSkills: ["Bad Slug"] },
+      newLessons: Array.from({ length: 20 }, (_, i) => ({ title: `R${i}`, objective: "r", skills: ["NOT OK"], reason: "x".repeat(500) })),
     });
     try {
       for (const p of [0, 1, 2]) await doLesson(curriculum.id, p, 0);
@@ -215,6 +221,7 @@ describe("self-healing end to end", () => {
     const after = await curriculumOf(curriculum.id);
     expect(after.lessons.filter((l) => l.kind === "remedial")).toHaveLength(MAX_REPLAN_LESSONS);
     expect(after.replanEvents[0].diagnosis.missingSkills).toEqual(["bad-slug"]);
+    expect(after.lessons.find((l) => l.kind === "remedial")!.reason!.length).toBeLessThanOrEqual(200);
   });
 
   it("learner notes are refreshed after attempts, capped and without the child's name", async () => {

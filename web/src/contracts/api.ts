@@ -93,10 +93,12 @@ export const GetCurriculumResponse = Curriculum;
 
 // --- Lessons --------------------------------------------------------------
 
-// A question as the child sees it: no answer, no explanation.
+// A question as the child sees it: no answer, no explanation, no per-choice
+// feedback (it gives the answer away).
 export const PublicQuestion = Question.omit({
   correctIndex: true,
   explanation: true,
+  choiceFeedback: true,
 });
 export type PublicQuestion = z.infer<typeof PublicQuestion>;
 

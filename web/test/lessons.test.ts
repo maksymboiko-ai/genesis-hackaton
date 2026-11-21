@@ -55,6 +55,7 @@ describe("lesson generation", () => {
     const raw = JSON.stringify(res.body);
     expect(raw).not.toContain("correctIndex");
     expect(raw).not.toContain("explanation");
+    expect(raw).not.toContain("choiceFeedback");
   });
 
   it("opening a pending lesson claims it once, even with parallel requests", async () => {
@@ -129,6 +130,7 @@ describe("checkLessonContent", () => {
     choices: ["1", "2", "3", "4"],
     correctIndex: 3,
     explanation: "because",
+    choiceFeedback: ["no", "no", "no", "yes"],
     skill: "adding",
     ...over,
   });
@@ -177,6 +179,7 @@ describe("retrieval", () => {
     objective: "denominators",
     skills: ["fractions"],
     retryOfLessonId: null,
+    reason: null,
     contentStatus: "generating",
     content: null,
     completedAt: null,

@@ -1,6 +1,6 @@
--- Tests for 0003_backend_functions.sql. Run on a scratch database that has
+-- Tests for 0004_backend_functions.sql. Run on a scratch database that has
 -- all migrations applied (never on the shared one):
---   psql "$SCRATCH_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/0003_backend_functions.sql
+--   psql "$SCRATCH_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/0004_backend_functions.sql
 -- Every block raises on failure; everything runs in a transaction that is
 -- rolled back at the end.
 
@@ -178,7 +178,7 @@ begin
   v_ids := apply_replan(v_cur, 2,
     jsonb_build_array(
       jsonb_build_object('kind','remedial','title','R','objective','r','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',null,'book_section_index',null),
-      jsonb_build_object('kind','retry','title','A','objective','a','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',v_first,'book_section_index',2)),
+      jsonb_build_object('kind','retry','title','A','objective','a','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',v_first,'book_section_index',2,'reason','Second try')),
     'struggling', '{"summary":"s","mistakes":[],"missingSkills":["s-one"]}'::jsonb);
 
   if array_length(v_ids, 1) <> 2 then
@@ -191,7 +191,9 @@ begin
   end if;
   if (select retry_of_lesson_id from lesson where id = v_ids[2]) <> v_first
      or (select book_section_index from lesson where id = v_ids[2]) <> 2
-     or (select kind from lesson where id = v_ids[1]) <> 'remedial' then
+     or (select kind from lesson where id = v_ids[1]) <> 'remedial'
+     or (select reason from lesson where id = v_ids[2]) <> 'Second try'
+     or (select reason from lesson where id = v_ids[1]) is not null then
     raise exception 'apply_replan: wrong lesson fields';
   end if;
   if (select replan_status from curriculum where id = v_cur) <> 'idle'

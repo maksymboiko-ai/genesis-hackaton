@@ -69,6 +69,7 @@ type LessonDb = {
   objective: string;
   skills: string[];
   retry_of_lesson_id: string | null;
+  reason: string | null;
   content_status: LessonRow["contentStatus"];
   content: unknown;
   completed_at: string | null;
@@ -78,7 +79,7 @@ type LessonDb = {
   created_at: string;
 };
 const LESSON_COLUMNS =
-  "id, curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, content_status, content, completed_at, last_score, book_section_index, generation_started_at, created_at";
+  "id, curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, reason, content_status, content, completed_at, last_score, book_section_index, generation_started_at, created_at";
 const toLesson = (r: LessonDb): LessonRow => ({
   id: r.id,
   curriculumId: r.curriculum_id,
@@ -88,6 +89,7 @@ const toLesson = (r: LessonDb): LessonRow => ({
   objective: r.objective,
   skills: r.skills,
   retryOfLessonId: r.retry_of_lesson_id,
+  reason: r.reason,
   contentStatus: r.content_status,
   content: r.content,
   completedAt: r.completed_at,
@@ -122,6 +124,7 @@ export const lessonJson = (l: NewLesson) => ({
   skills: l.skills,
   retry_of_lesson_id: l.retryOfLessonId,
   book_section_index: l.bookSectionIndex,
+  reason: l.reason,
 });
 
 type AttemptDb = { id: string; lesson_id: string; score: number; results: unknown; created_at: string };

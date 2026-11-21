@@ -70,7 +70,7 @@ A module is **Ready** only when all four steps are done.
 |---|---|
 | Routes | `POST /api/curricula`, `GET /api/curricula?childId=`, `GET /api/curricula/[curriculumId]` |
 | Services | `lib/server/curricula.ts`: `createCurriculum`, `listCurricula`, `getCurriculum`; pure `validateOutline(outline, sections)` |
-| DB | migration `0003_backend_functions.sql`: `create_curriculum(...)` inserts curriculum + lessons in one transaction (contract change: separate PR, quick OK from AI and Frontend) |
+| DB | migration `0004_backend_functions.sql` (first written as `0003`, renumbered after the AI branch added `0003_explanations.sql`): `create_curriculum(...)` inserts curriculum + lessons in one transaction (contract change: separate PR, quick OK from AI and Frontend) |
 | Rules | child exists; `bookId` exists and is `ready` (else 409); clarifications ≤ `MAX_CLARIFYING_QUESTIONS`, each answer capped; outline caps: 1–12 lessons, slugs match `SkillSlug`, `bookSectionIndex` in range or null; rate limit |
 | Tests | `validateOutline` drops/rejects bad slugs and out-of-range sections; `needs_clarification` stores nothing; `created` response parses with `CreateCurriculumResponse` |
 | Smoke | vague prompt → questions → resend with answers → created; get by id; list by child |
@@ -81,7 +81,7 @@ A module is **Ready** only when all four steps are done.
 |---|---|
 | Routes | `GET /api/lessons/[lessonId]` |
 | Services | `lib/server/lessons.ts`: `getLesson`, `claimLesson`, `generateLessonContent`, `startNextLesson`; `lib/server/retrieval.ts`: `chunksForLesson(lesson, curriculum)` |
-| DB | `0003` also adds `lesson.generation_started_at` for stuck recovery |
+| DB | `0004` also adds `lesson.generation_started_at` for stuck recovery |
 | Rules | conditional claim; `after()` with try/catch → `failed`; `generating` older than 3 min is re-claimable; response through `GetLessonResponse` |
 | Tests | `chunksForLesson` strategy (≤ limit: all in reading order; > limit: match + sort by `chunk_index`; remedial: whole book; retry: original section; no book: `[]`); `GetLessonResponse` strips answers |
 | Smoke | open lesson → `generating` → poll → `ready`; 20 parallel GETs → exactly one fake generation call |
@@ -92,7 +92,7 @@ A module is **Ready** only when all four steps are done.
 |---|---|
 | Routes | `POST /api/lessons/[lessonId]/attempts` |
 | Services | pure `grading.ts`: `gradeAttempt(content, answers)`; pure `mastery.ts`: `skillScores(results)`, `nextMastery(prev, score)`; `attempts.ts`: `submitAttempt` |
-| DB | `0003`: `record_attempt(...)`: insert attempt, complete lesson, upsert mastery, in one transaction |
+| DB | `0004`: `record_attempt(...)`: insert attempt, complete lesson, upsert mastery, in one transaction |
 | Tests | all correct → 1, none → 0; unknown / duplicate / missing questionId → 400; `chosenIndex` 4 → 400; lesson not ready → 409; mastery: 0.5 → 0.65 after one correct of one, using constants |
 | Smoke | answer a lesson → results with explanations, `nextLessonId` is the next position |
 
@@ -101,7 +101,7 @@ A module is **Ready** only when all four steps are done.
 | | |
 |---|---|
 | Services | pure `replan-rule.ts`: `decideReplan(scores)`; pure `replan-plan.ts`: rows to insert (remedial after current + retry copies with original section, or extensions at the end); `replan.ts`: `runReplan(curriculumId, trigger)`; `notes.ts`: `refreshLearnerNotes(childId)` |
-| DB | `0003`: `apply_replan(...)` shifts the tail, inserts lessons, writes `replan_event`, sets `last_replan_at`, sets `idle`; `curriculum.replan_started_at` for stuck recovery |
+| DB | `0004`: `apply_replan(...)` shifts the tail, inserts lessons, writes `replan_event`, sets `last_replan_at`, sets `idle`; `curriculum.replan_started_at` for stuck recovery |
 | Rules | claim `idle → running`; cap new lessons ≤ 4; failure → `idle` with no partial inserts; notes capped at 2000 chars |
 | Tests | `decideReplan`: fewer than 3 → null, mean 0.59 → struggling, 0.6 → null, 0.9 → excelling; plan builder positions are contiguous and retry rows point at the right lesson; parallel triggers → one replan |
 | Smoke | 3 bad attempts → `replanTriggered: "struggling"` → poll curriculum → new remedial + retry lessons + diagnosis |
@@ -120,7 +120,7 @@ M6 is last of the feature modules on purpose: the demo works without a book, so 
 
 ### M7. Hardening and integration (≈ 40 min, from 16:30) — F10, F11, F12
 
-- Full `/backend-security review` over `app/api/` + `lib/server/` + `0003`.
+- Full `/backend-security review` over `app/api/` + `lib/server/` + `0004`.
 - Rate limits on all model-triggering routes; daily budget guard on `llm_call`.
 - Security headers + `poweredByHeader: false` in `next.config.ts` (agree with Frontend).
 - `npm audit --omit=dev`.
@@ -171,7 +171,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F7 | replan | M5 | ✅ | rule in code with contract constants; `claim_replan` + `apply_replan` RPCs; remedial + retries before the next unfinished lesson, extensions appended; ≤ 4 model lessons; failure → idle, nothing written; first new lesson pre-generated |
 | F8 | learner notes | M5 | ✅ | after every attempt, from the latest 5 attempts across subjects; capped at 2000 chars; no names sent |
 | F9 | llm_call logging | M0 | ✅ | `lib/server/ai.ts` wraps every `AiService` call: `onCall` → `llm_call`, fire-and-forget |
-| F10 | security baseline | M0–M7 | ✅ | Zod at every edge, body caps, generic errors, per-route rate limits, daily AI budget, `server-only`, security headers, RLS + revoked function access for Supabase client roles (`0004`), `npm audit`: 0 vulnerabilities |
+| F10 | security baseline | M0–M7 | ✅ | Zod at every edge, body caps, generic errors, per-route rate limits, daily AI budget, `server-only`, security headers, RLS + revoked function access for Supabase client roles (`0005`), `npm audit`: 0 vulnerabilities |
 | F11 | claims, failure reset, stuck recovery | M3, M5 | ✅ | stale `generating`/`running` reclaimed after 3 min; `failed` lesson retried on open after a 60 s cooldown; failed replan releases to idle |
 | F12 | fake/real AiService switch | M0, M7 | ✅ | `AI_MODE=real` (default) calls `lib/ai` (merged from `feature/ai-functions`); `fake` for tests and keyless local runs; key checked only when a model is called |
 
@@ -195,7 +195,8 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
-| 14:15 | M7 | Supabase `anon` role could read every table and call the write functions → `0004` (RLS on, no policies; execute revoked); `AI_MODE=real` without a key broke every route → key now checked per model call; security headers, `poweredByHeader: false` | No CSP yet (needs Frontend); deploy to Vercel not done; real model and real Supabase not exercised from here |
+| 14:25 | Merge 2 | AI branch: `PublicQuestion` would have carried `choiceFeedback` (answer leak; also broke `GetLessonResponse`) → omitted in the contract; my `getAi()` wrapper dropped `this` (real `prepareBook` calls `this.embed`) → fixed; migrations renumbered after `0003_explanations.sql` | — |
+| 14:15 | M7 | Supabase `anon` role could read every table and call the write functions → `0005` (RLS on, no policies; execute revoked); `AI_MODE=real` without a key broke every route → key now checked per model call; security headers, `poweredByHeader: false` | No CSP yet (needs Frontend); deploy to Vercel not done; real model and real Supabase not exercised from here |
 | 14:00 | M6 | Upload rate limit confirmed by tests; `match_book_chunks` checked with section filter and order | Vercel 4.5 MB body limit on uploads; chunks inserted in batches, not one transaction (cleaned up on failure) |
 | 13:52 | M5 | Background jobs ran before the response in tests, hiding the `running` state → test runner now defers jobs like `after()`; child-attempt query limited to the 5 latest curricula (URL length) | A replan that keeps failing is retried on every following attempt (one model call each) |
 | 13:44 | M4 | Contract leaves `answers` unbounded → capped at 10 and `chosenIndex` 0–3 at the edge; re-attempt kept the first completion time | Double submit stores two attempts (counts twice in the replan window) |
@@ -211,10 +212,10 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **`vitest@3`**, not 4: vitest 4 needs `@types/node` ≥ 22 and the app pins `^20`.
 - `GET /api/health` stays as a deploy check.
 - **`feature/ai-functions` merged into `backend`** to wire the real `AiService` (merge commit, conflicts only in `.gitignore` and `package*.json`).
-- **Migration `0004`** (not in the plan): RLS on, no policies, function execute revoked from Supabase client roles. See ADR 0003.
+- **Migration `0005`** (not in the plan): RLS on, no policies, function execute revoked from Supabase client roles. See ADR 0003.
 - **Remedial placement.** Inserted before the next lesson the child has not done (the frontend mock inserts one lesson later).
 - **Failed lessons.** Not in the original plan: opening a `failed` lesson retries it, but only 60 s after the failed attempt.
-- **SQL tests.** `supabase/tests/0003_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
+- **SQL tests.** `supabase/tests/0004_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 
 ### Verification at the end of M7
 
@@ -231,7 +232,7 @@ Not verified from here: the Supabase store against a real project (only type-che
 
 ## 6. How to run
 
-1. Supabase: apply `0001` → `0004` in order; create a **private** storage bucket `books`.
+1. Supabase: apply `0001` → `0006` in order; create a **private** storage bucket `books`.
 2. `cp web/.env.example web/.env.local` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`.
 3. Frontend on the real API: `NEXT_PUBLIC_API_MOCK=false`.
 4. Without a database or key: `STORE=memory AI_MODE=fake npm run dev`.
@@ -241,6 +242,6 @@ Not verified from here: the Supabase store against a real project (only type-che
 ## 7. Open questions
 
 1. Who creates the Supabase project and applies migrations? Share URL + service key via a private channel only. (Developer answer: it's done by other developer, so won't implement it)
-2. `0003_backend_functions.sql` (three RPC functions + two timestamp columns) is a contract change: get a quick OK from AI and Frontend owners.
+2. `0004_backend_functions.sql` (five RPC functions + two timestamp columns), `0005` and `0006` are contract changes: get a quick OK from AI and Frontend owners.
 3. Will the demo be deployed publicly? If yes, add the optional `DEMO_ACCESS_TOKEN` (needs a frontend header).
 4. Frontend must render `bodyMarkdown` without raw HTML.

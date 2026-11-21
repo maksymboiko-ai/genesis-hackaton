@@ -54,6 +54,8 @@ export type LessonRow = {
   objective: string;
   skills: string[];
   retryOfLessonId: string | null;
+  // Why a replan added the lesson, to the child; null for core lessons.
+  reason: string | null;
   contentStatus: ContentStatus;
   // LessonContent (jsonb), null until ready.
   content: unknown;
@@ -82,6 +84,7 @@ export type NewLesson = {
   skills: string[];
   retryOfLessonId: string | null;
   bookSectionIndex: number | null;
+  reason: string | null;
 };
 
 export type AttemptRow = {

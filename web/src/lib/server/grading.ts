@@ -37,7 +37,9 @@ export function gradeAttempt(
       chosenIndex,
       correctIndex: q.correctIndex,
       correct: chosenIndex === q.correctIndex,
-      explanation: q.explanation,
+      // Feedback for the choice the child picked: what went right, or the
+      // slip behind it and the right way.
+      explanation: q.choiceFeedback[chosenIndex] || q.explanation,
     };
   });
   return { score: results.filter((r) => r.correct).length / results.length, results };

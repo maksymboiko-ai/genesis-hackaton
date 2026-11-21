@@ -4,7 +4,7 @@ import {
   type AiService,
   type GenerateLessonInput,
   type GenerateOutlineInput,
-  type LessonOutline,
+  type PlannedLesson,
   type OutlineResult,
   type PrepareBookInput,
   type PreparedBook,
@@ -114,14 +114,19 @@ export const fakeAi: AiService = {
       const skill = skills[n % skills.length];
       const correctIndex = n % CHOICES_PER_QUESTION;
       const wrong = ["A common mistake", "A partly right answer", "An unrelated answer"];
+      const choices = Array.from({ length: CHOICES_PER_QUESTION }, (_, c) =>
+        c === correctIndex ? "The correct answer" : wrong.pop()!,
+      );
+      const explanation = `It applies ${label(skill)} the way the lesson explains.`;
       return {
         id: crypto.randomUUID(),
         prompt: `Question ${n + 1}: which answer shows ${label(skill)}?`,
-        choices: Array.from({ length: CHOICES_PER_QUESTION }, (_, c) =>
-          c === correctIndex ? "The correct answer" : wrong.pop()!,
-        ),
+        choices,
         correctIndex,
-        explanation: `It applies ${label(skill)} the way the lesson explains.`,
+        explanation,
+        choiceFeedback: choices.map((c, i) =>
+          i === correctIndex ? explanation : `"${c}" comes from a slip with ${label(skill)}. Go back one step and redo it.`,
+        ),
         skill,
       };
     });
@@ -137,26 +142,34 @@ export const fakeAi: AiService = {
   async replan(input: ReplanInput) {
     if (input.trigger === "excelling") {
       return {
-        diagnosis: { summary: "The last lessons went very well.", mistakes: [], missingSkills: [] },
+        diagnosis: {
+          summary: "The last lessons went very well.",
+          childMessage: "You are ahead of the plan, so we added a challenge lesson at the end.",
+          mistakes: [],
+          missingSkills: [],
+        },
         newLessons: [
           {
             title: "Challenge: going further",
             objective: "Harder problems for a learner who is ahead.",
             skills: ["advanced-problems"],
+            reason: "You got nearly everything right, so here is something harder.",
           },
         ],
       };
     }
     const wrong = input.recentAttempts.flatMap((a) => a.wrongAnswers);
     const missingSkills = [...new Set(wrong.map((w) => w.skill))].slice(0, 2);
-    const newLessons: LessonOutline[] = missingSkills.map((skill) => ({
+    const newLessons: PlannedLesson[] = missingSkills.map((skill) => ({
       title: `Review: ${label(skill)}`,
       objective: `Rebuild ${label(skill)} from the ground up.`,
       skills: [skill],
+      reason: `Your answers on ${label(skill)} went different ways, so we start from the idea underneath it.`,
     }));
     return {
       diagnosis: {
         summary: "The last lessons were too hard, so review lessons come first.",
+        childMessage: "A couple of short lessons come first, so the next part feels easier.",
         mistakes: missingSkills.map((s) => `Several wrong answers on ${label(s)}.`),
         missingSkills,
       },

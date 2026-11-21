@@ -1,5 +1,5 @@
 import "server-only";
-import type { LessonOutline } from "@/contracts/ai";
+import type { PlannedLesson } from "@/contracts/ai";
 import {
   EXCELLING_FROM,
   REPLAN_WINDOW,
@@ -15,6 +15,9 @@ import { cleanText, toSkillSlug } from "./text";
 
 // Lessons the model may add in one replan (model output is untrusted).
 export const MAX_REPLAN_LESSONS = 4;
+const MAX_REASON_CHARS = 200;
+// Retries are added by code, so their reason is too.
+export const RETRY_REASON = "A second try at this lesson, now that the review lessons are behind you.";
 
 /**
  * The replan rule. `scores` are the attempts since the last replan, newest
@@ -29,21 +32,23 @@ export function decideReplan(scores: number[]): ReplanTrigger | null {
   return null;
 }
 
-export function cleanDiagnosis(d: { summary: string; mistakes: string[]; missingSkills: string[] }): ReplanDiagnosis {
+export function cleanDiagnosis(d: ReplanDiagnosis): ReplanDiagnosis {
   return {
     summary: cleanText(d.summary, 1000),
+    childMessage: cleanText(d.childMessage, 400),
     mistakes: d.mistakes.map((m) => cleanText(m, 300)).filter(Boolean).slice(0, 10),
     missingSkills: [...new Set(d.missingSkills.map(toSkillSlug).filter((s): s is string => s !== null))].slice(0, 10),
   };
 }
 
-function cleanOutline(l: LessonOutline, kind: "remedial" | "extension"): NewLesson | null {
+function cleanOutline(l: PlannedLesson, kind: "remedial" | "extension"): NewLesson | null {
   const title = cleanText(l.title, 150);
   const objective = cleanText(l.objective, 500);
   if (!title || !objective) return null;
   const skills = [...new Set(l.skills.map(toSkillSlug).filter((s): s is string => s !== null))].slice(0, 5);
   if (skills.length === 0) skills.push(toSkillSlug(title) ?? "general");
-  return { kind, title, objective, skills, retryOfLessonId: null, bookSectionIndex: null };
+  const reason = cleanText(l.reason, MAX_REASON_CHARS) || null;
+  return { kind, title, objective, skills, retryOfLessonId: null, bookSectionIndex: null, reason };
 }
 
 /**
@@ -56,7 +61,7 @@ export function planReplan(input: {
   trigger: ReplanTrigger;
   lessons: LessonRow[];
   windowAttempts: { lessonId: string; score: number }[];
-  proposed: LessonOutline[];
+  proposed: PlannedLesson[];
 }): { insertAt: number; rows: NewLesson[] } {
   const ordered = [...input.lessons].sort((a, b) => a.position - b.position);
   const end = ordered.length ? ordered[ordered.length - 1].position + 1 : 0;
@@ -84,6 +89,7 @@ export function planReplan(input: {
       skills: l.skills,
       retryOfLessonId: l.id,
       bookSectionIndex: sectionFor(l, ordered),
+      reason: RETRY_REASON,
     }));
 
   const next = ordered.find((l) => !l.completedAt);

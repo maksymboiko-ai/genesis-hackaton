@@ -183,3 +183,19 @@ describe("AI_MODE=real", () => {
     }
   });
 });
+
+describe("AI wrapper keeps `this`", () => {
+  it("calls methods on the service object (lib/ai prepareBook uses this.embed)", async () => {
+    const original = fakeAi.prepareBook;
+    fakeAi.prepareBook = async function (this: typeof fakeAi) {
+      const [v] = await this.embed(["x"]);
+      return { sections: [{ index: 0, chapter: "", title: "A", summary: "" }], chunks: [{ content: "x", sectionIndex: 0, embedding: v }] };
+    };
+    try {
+      const out = await getAi().prepareBook({ title: "t", text: "x" });
+      expect(out.chunks[0].embedding).toHaveLength(EMBEDDING_DIMENSIONS);
+    } finally {
+      fakeAi.prepareBook = original;
+    }
+  });
+});

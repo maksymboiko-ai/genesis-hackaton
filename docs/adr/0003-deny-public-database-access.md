@@ -3,7 +3,7 @@
 - **Status:** Proposed. Needs OK from AI and Frontend owners (contract change)
 - **Date:** 2026-11-21
 - **Owner:** Backend
-- **Affects:** `supabase/migrations/0004_lock_down_public_access.sql`
+- **Affects:** `supabase/migrations/0005_lock_down_public_access.sql`
 
 ## Context
 
@@ -18,7 +18,7 @@ the server uses the service role key, which bypasses RLS.
 
 ## Decision
 
-Migration `0004`:
+Migration `0005`:
 
 - enables RLS on every table **without policies**, so `anon` and
   `authenticated` see no rows and can write nothing;
@@ -28,7 +28,7 @@ Migration `0004`:
 ## Consequences
 
 - ✅ The anon key alone exposes nothing. The backend is unaffected (tested in
-  `supabase/tests/0004_lock_down_public_access.sql`).
+  `supabase/tests/0005_lock_down_public_access.sql`).
 - ⚠️ New tables and functions are public again by default: every later
   migration that adds one must enable RLS / revoke execute the same way.
 - ⚠️ Real per-family access rules (policies) still arrive with real accounts.
