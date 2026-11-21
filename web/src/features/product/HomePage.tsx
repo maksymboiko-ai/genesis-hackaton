@@ -34,8 +34,20 @@ export function HomePage() {
     setCreating(true)
     setCreateError('')
     try {
-      const created = await api.createCurriculum({ childId, prompt: prompt.trim(), bookId: null })
-      router.push(`/app/curricula/${created.id}`)
+      const result = await api.createCurriculum({
+        childId,
+        prompt: prompt.trim(),
+        bookId: null,
+        clarifications: [],
+      })
+      if (result.status === 'needs_clarification') {
+        // Placeholder until the questions get their own step: ask for the
+        // missing detail in the goal itself.
+        setCreateError(`Add a little more detail to the goal: ${result.questions.join(' ')}`)
+        setCreating(false)
+        return
+      }
+      router.push(`/app/curricula/${result.curriculum.id}`)
     } catch {
       setCreateError('Could not build the plan. Try again.')
       setCreating(false)

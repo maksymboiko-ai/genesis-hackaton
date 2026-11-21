@@ -318,7 +318,7 @@ async function createCurriculum(db: Db, raw: unknown) {
   const first = lessonsOf(db, curriculum.id)[0]
   first.contentStatus = 'generating'
   first.readyAt = Date.now() + LESSON_MS
-  return publicCurriculum(db, curriculum)
+  return { status: 'created' as const, curriculum: publicCurriculum(db, curriculum) }
 }
 
 function getLesson(db: Db, lessonId: string) {

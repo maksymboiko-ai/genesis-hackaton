@@ -14,6 +14,7 @@
 // length or range constraints. Check anything else in code after parsing.
 import { z } from "zod";
 import {
+  BookSection,
   Clarification,
   LearnerProfile,
   LessonContent,
@@ -24,7 +25,7 @@ import {
 // One model call, reported through AiCallOptions.onCall. The backend writes
 // these to the llm_call table; evals collect them in memory.
 export type LlmCallRecord = {
-  task: "outline" | "lesson" | "replan" | "learner_notes" | "embed";
+  task: "outline" | "lesson" | "replan" | "learner_notes" | "book_map" | "embed";
   model: string;
   latencyMs: number;
   inputTokens: number | null;
@@ -50,20 +51,50 @@ export const LessonOutline = z.object({
 });
 export type LessonOutline = z.infer<typeof LessonOutline>;
 
+// A lesson in a new curriculum. bookSectionIndex is the BookSection the
+// lesson is taught from; null when there is no book or no section fits.
+export const OutlineLesson = LessonOutline.extend({
+  bookSectionIndex: z.number().nullable(),
+});
+export type OutlineLesson = z.infer<typeof OutlineLesson>;
+
 export const OutlineOutput = z.object({
   subject: z.string(),
   title: z.string(),
-  lessons: z.array(LessonOutline),
+  lessons: z.array(OutlineLesson),
 });
 export type OutlineOutput = z.infer<typeof OutlineOutput>;
 
 // What the model returns for an outline request. Either questions is empty
 // and the rest is a full outline, or the goal is too vague to plan: then
 // questions holds what to ask and lessons is [].
-export const OutlineDraft = OutlineOutput.extend({
+export const OutlineDraft = z.object({
   questions: z.array(z.string()),
+  subject: z.string(),
+  title: z.string(),
+  lessons: z.array(
+    LessonOutline.extend({
+      // -1 when the lesson is not taught from a book section.
+      bookSectionIndex: z.number(),
+    }),
+  ),
 });
 export type OutlineDraft = z.infer<typeof OutlineDraft>;
+
+// What the model returns when mapping a book. It sees the chunks numbered
+// from 0 and says where each section starts.
+export const BookMapOutput = z.object({
+  sections: z.array(
+    z.object({
+      chapter: z.string(),
+      title: z.string(),
+      summary: z.string(),
+      // Index of the first chunk of the section. Strictly increasing.
+      firstChunk: z.number(),
+    }),
+  ),
+});
+export type BookMapOutput = z.infer<typeof BookMapOutput>;
 
 // What generateOutline returns. "questions" has 1 to
 // MAX_CLARIFYING_QUESTIONS entries and only happens when
@@ -118,8 +149,9 @@ export type GenerateOutlineInput = {
   learner: LearnerProfile;
   // Skill slugs this child already has mastery rows for, to be reused.
   knownSkills: string[];
-  // Excerpts from the source book, or [] when there is no book.
-  sourceChunks: string[];
+  // The map of the source book, or [] when there is no book. The outline is
+  // planned from the whole map, not from retrieved excerpts.
+  bookSections: BookSection[];
 };
 
 export type GenerateLessonInput = {
@@ -127,6 +159,8 @@ export type GenerateLessonInput = {
   lesson: LessonOutline & { kind: "core" | "remedial" | "retry" | "extension" };
   learner: LearnerProfile;
   previousLessonTitles: string[];
+  // Excerpts from the lesson's book section in reading order, or [] when
+  // there is no book.
   sourceChunks: string[];
 };
 
@@ -148,6 +182,24 @@ export type ReplanInput = {
   recentAttempts: LessonAttemptSummary[];
   remainingLessons: LessonOutline[];
   knownSkills: string[];
+};
+
+export type PrepareBookInput = {
+  title: string;
+  // The full text of the book, as extracted from the PDF.
+  text: string;
+};
+
+// A book ready to store: its map, and every chunk with its section and
+// embedding. Chunks are in reading order; a chunk's position in the array is
+// its chunk_index.
+export type PreparedBook = {
+  sections: BookSection[];
+  chunks: {
+    content: string;
+    sectionIndex: number;
+    embedding: number[];
+  }[];
 };
 
 export type UpdateLearnerNotesInput = {
@@ -181,10 +233,18 @@ export interface AiService {
     options?: AiCallOptions,
   ): Promise<LearnerNotesOutput>;
 
-  // RAG helpers. The backend stores the chunks and vectors and runs the
-  // similarity query; see match_book_chunks in the database schema.
-  chunkText(text: string): string[];
-  // One vector of EMBEDDING_DIMENSIONS numbers per input, in order.
+  // Book ingestion in one step: splits the text into chunks, maps the
+  // book's sections and embeds every chunk. The backend stores the result.
+  // options.model overrides the model that builds the map; chunks are always
+  // embedded with EMBEDDING_MODEL.
+  prepareBook(
+    input: PrepareBookInput,
+    options?: AiCallOptions,
+  ): Promise<PreparedBook>;
+
+  // Embeds retrieval queries (a lesson's title and objective) for
+  // match_book_chunks in the database schema. One vector of
+  // EMBEDDING_DIMENSIONS numbers per input, in order.
   embed(texts: string[], options?: AiCallOptions): Promise<number[][]>;
 }
 
