@@ -1,5 +1,6 @@
 import { Atom, BookOpen, FlaskConical, Landmark, MessageCircle, Pencil, Triangle } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { Mascot } from '@/components/Mascot'
 import { SubjectIcon } from '@/components/SubjectTile'
 import { Wordmark } from '@/components/Wordmark'
 
@@ -68,6 +69,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             Fixes the plan.
           </h1>
           <p className="sub lg:text-[19px]">Short lessons that adapt after every quiz.</p>
+          <Mascot pose="thumbs-up" size={190} className="mt-3 hidden lg:block" />
         </div>
 
         <div aria-hidden="true" className="mt-auto hidden grid-cols-[repeat(4,minmax(0,96px))] gap-3 pt-12 lg:grid">
@@ -78,6 +80,9 @@ export function AuthShell({ children }: { children: ReactNode }) {
       </section>
 
       <section className="mx-auto flex w-full max-w-[560px] flex-1 flex-col justify-end px-6 pt-8 pb-6 lg:mx-0 lg:max-w-none lg:items-center lg:justify-center lg:p-12">
+        <div className="grid min-h-0 flex-1 place-items-center overflow-hidden py-2 lg:hidden">
+          <Mascot pose="curious" size={150} className="a-pop h-auto max-h-full w-[156px] object-contain" />
+        </div>
         {children}
       </section>
     </main>

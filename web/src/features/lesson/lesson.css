@@ -269,3 +269,17 @@
     max-width: 100%;
   }
 }
+
+.ld code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.ld .li-body > :last-child {
+  margin-bottom: 0;
+}
+.ld ol.steps .li-body {
+  min-width: 0;
+  align-self: center;
+}
