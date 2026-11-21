@@ -104,7 +104,7 @@ function explanationChecks(result: Awaited<ReturnType<AiService["replan"]>>): Re
     "child message is at most 50 words": words(childMessage) <= 50,
     "child message differs from the parent summary": childMessage !== summary,
     "every reason is one sentence of at most 35 words": result.newLessons.every((l) => words(l.reason) <= 35),
-    "nothing said to the child mentions scores or failing": !toChild.some((text) => /\d+\s?%|bfail|bwrongb/i.test(text)),
+    "nothing said to the child mentions scores or failing": !toChild.some((text) => /\d+\s?%|\bfail|\bwrong\b/i.test(text)),
   };
 }
 
@@ -255,7 +255,7 @@ async function lessonCase(
       (q) => new Set(q.choiceFeedback).size === q.choiceFeedback.length,
     ),
     "feedback never says wrong or incorrect": !content.questions.some((q) =>
-      q.choiceFeedback.some((text) => /b(wrong|incorrect|silly)b/i.test(text)),
+      q.choiceFeedback.some((text) => /\b(wrong|incorrect|silly)\b/i.test(text)),
     ),
     "math is in backticks": /`[^`]*\d[^`]*`/.test(content.bodyMarkdown),
     "ends with a Remember line": /\*\*Remember:?\*\*/.test(content.bodyMarkdown),
