@@ -22,8 +22,11 @@ export type MemoryData = {
   lessons: LessonRow[];
   replanEvents: ReplanEventRow[];
   chunks: ChunkRow[];
+  attempts: AttemptRow[];
   llmCalls: LlmCallRow[];
 };
+
+export type AttemptRow = { id: string; lessonId: string; score: number; results: unknown; createdAt: string };
 
 export type ChunkRow = { bookId: string; chunkIndex: number; content: string; sectionIndex: number; embedding: number[] };
 
@@ -40,7 +43,7 @@ function cosine(a: number[], b: number[]): number {
 }
 
 export function emptyData(): MemoryData {
-  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], llmCalls: [] };
+  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], llmCalls: [] };
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -201,6 +204,33 @@ export class MemoryStore implements Store {
   async failLesson(id: string) {
     const row = this.data.lessons.find((l) => l.id === id && l.contentStatus === "generating");
     if (row) row.contentStatus = "failed";
+  }
+
+  async recordAttempt(input: {
+    lessonId: string;
+    score: number;
+    results: unknown;
+    childId: string;
+    subject: string;
+    mastery: { skill: string; mastery: number }[];
+  }) {
+    const lesson = this.data.lessons.find((l) => l.id === input.lessonId);
+    if (!lesson) throw new Error("fk violation: lesson");
+    if (!(input.score >= 0 && input.score <= 1)) throw new Error("check violation: score");
+    if (input.mastery.some((m) => !(m.mastery >= 0 && m.mastery <= 1))) throw new Error("check violation: mastery");
+    const id = uuid();
+    const at = now();
+    this.data.attempts.push({ id, lessonId: input.lessonId, score: input.score, results: copy(input.results), createdAt: at });
+    lesson.completedAt ??= at;
+    lesson.lastScore = input.score;
+    for (const m of input.mastery) {
+      const row = this.data.mastery.find(
+        (r) => r.childId === input.childId && r.subject === input.subject && r.skill === m.skill,
+      );
+      if (row) row.mastery = m.mastery;
+      else this.data.mastery.push({ childId: input.childId, subject: input.subject, skill: m.skill, mastery: m.mastery });
+    }
+    return id;
   }
 
   async countChunks(bookId: string, sectionIndex: number) {

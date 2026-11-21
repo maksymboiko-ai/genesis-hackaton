@@ -167,7 +167,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F3 | create curriculum + clarification | M2 | ✅ | one clarification round enforced; outline bounded (≤ 12 lessons, ≤ 5 slugs each, section index checked); `create_curriculum` RPC; first lesson claimed before the response |
 | F4 | list/get curricula | M2 | ✅ | list newest first; unknown child → 404 |
 | F5 | lesson generation + retrieval | M3 | ✅ | `claim_lesson` RPC; next pending lesson prefetched in the same job; content bounded (≤ 10 questions, 4 choices, slugs, markdown sanitized); answers stripped by `GetLessonResponse` |
-| F6 | attempts, grading, mastery | M4 | ❌ | — |
+| F6 | attempts, grading, mastery | M4 | ✅ | graded in code; `record_attempt` RPC (attempt + completion + mastery in one transaction); ≤ 10 answers, `chosenIndex` 0–3 at the edge |
 | F7 | replan | M5 | ❌ | — |
 | F8 | learner notes | M5 | ❌ | — |
 | F9 | llm_call logging | M0 | ✅ | `lib/server/ai.ts` wraps every `AiService` call: `onCall` → `llm_call`, fire-and-forget |
@@ -183,7 +183,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | M1 Children | ✅ | ✅ 6 tests | ✅ | ✅ |
 | M2 Curricula | ✅ | ✅ 9 tests + SQL test | ✅ | ✅ |
 | M3 Lessons | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
-| M4 Attempts | ❌ | ❌ | ❌ | ❌ |
+| M4 Attempts | ✅ | ✅ 7 tests + SQL test | ✅ | ✅ |
 | M5 Replan | ❌ | ❌ | ❌ | ❌ |
 | M6 Books | ❌ | ❌ | ❌ | ❌ |
 | M7 Hardening | ❌ | ❌ | ❌ | ❌ |
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 13:44 | M4 | Contract leaves `answers` unbounded → capped at 10 and `chosenIndex` 0–3 at the edge; re-attempt kept the first completion time | Double submit stores two attempts (counts twice in the replan window) |
 | 13:40 | M3 | A `failed` lesson was reclaimed on every poll: the UI never saw `failed` and a model outage meant endless paid retries → 60 s retry cooldown in `claim_lesson` | — |
 | 13:35 | M2 | Model returning questions after answers would loop → now a 502; book with a broken section map → 500 instead of a bad plan | — |
 | 13:32 | M1 | Long names were silently truncated → now rejected with 400 above 100 chars | — |

@@ -71,3 +71,40 @@ as $$
   )
   select exists (select 1 from claimed);
 $$;
+
+-- Stores one graded attempt: the attempt row, the lesson's completion and
+-- score, and the new mastery values (computed in TypeScript) in one
+-- transaction. p_mastery: [{ skill, mastery }]. Returns the attempt id.
+create function record_attempt(
+  p_lesson_id uuid,
+  p_score     real,
+  p_results   jsonb,
+  p_child_id  uuid,
+  p_subject   text,
+  p_mastery   jsonb
+)
+returns uuid
+language plpgsql
+as $$
+declare
+  v_id uuid;
+begin
+  insert into attempt (lesson_id, score, results)
+  values (p_lesson_id, p_score, p_results)
+  returning id into v_id;
+
+  -- Any attempt completes the lesson, whatever the score.
+  update lesson
+     set completed_at = coalesce(completed_at, now()),
+         last_score = p_score
+   where id = p_lesson_id;
+
+  insert into skill_mastery (child_id, subject, skill, mastery, updated_at)
+  select p_child_id, p_subject, m.value->>'skill', (m.value->>'mastery')::real, now()
+  from jsonb_array_elements(coalesce(p_mastery, '[]'::jsonb)) as m(value)
+  on conflict (child_id, subject, skill)
+  do update set mastery = excluded.mastery, updated_at = excluded.updated_at;
+
+  return v_id;
+end;
+$$;

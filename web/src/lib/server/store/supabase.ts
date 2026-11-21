@@ -277,6 +277,26 @@ export class SupabaseStore implements Store {
     check(error, "fail lesson");
   }
 
+  async recordAttempt(input: {
+    lessonId: string;
+    score: number;
+    results: unknown;
+    childId: string;
+    subject: string;
+    mastery: { skill: string; mastery: number }[];
+  }) {
+    const { data, error } = await this.db.rpc("record_attempt", {
+      p_lesson_id: input.lessonId,
+      p_score: input.score,
+      p_results: input.results,
+      p_child_id: input.childId,
+      p_subject: input.subject,
+      p_mastery: input.mastery,
+    });
+    check(error, "record_attempt");
+    return data as string;
+  }
+
   async countChunks(bookId: string, sectionIndex: number) {
     const { count, error } = await this.db
       .from("book_chunk")

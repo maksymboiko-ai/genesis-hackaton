@@ -108,4 +108,49 @@ begin
   raise notice 'claim_lesson: ok';
 end $$;
 
+-- record_attempt ----------------------------------------------------------------
+do $$
+declare
+  v_child uuid := (select id from t_ids where name = 'child');
+  v_lesson uuid;
+  v_attempt uuid;
+  v_first timestamptz;
+begin
+  select l.id into v_lesson from lesson l join t_ids t on t.name = 'curriculum' and l.curriculum_id = t.id where l.position = 1;
+
+  v_attempt := record_attempt(v_lesson, 0.5, '[{"questionId":"q1"}]'::jsonb, v_child, 'Math',
+    '[{"skill":"s-one","mastery":0.65},{"skill":"s-two","mastery":0.35}]'::jsonb);
+  if not exists (select 1 from attempt where id = v_attempt and score = 0.5) then
+    raise exception 'record_attempt: attempt not stored';
+  end if;
+  select completed_at into v_first from lesson where id = v_lesson;
+  if v_first is null or (select last_score from lesson where id = v_lesson) <> 0.5 then
+    raise exception 'record_attempt: lesson not completed';
+  end if;
+  if (select count(*) from skill_mastery where child_id = v_child and subject = 'Math') <> 2 then
+    raise exception 'record_attempt: mastery not inserted';
+  end if;
+
+  -- Second attempt: upsert mastery, keep the first completion time.
+  perform pg_sleep(0.01);
+  perform record_attempt(v_lesson, 1, '[]'::jsonb, v_child, 'Math', '[{"skill":"s-one","mastery":0.8}]'::jsonb);
+  if abs((select mastery from skill_mastery where child_id = v_child and skill = 's-one') - 0.8) > 1e-6 then
+    raise exception 'record_attempt: mastery not updated';
+  end if;
+  if (select completed_at from lesson where id = v_lesson) <> v_first or (select last_score from lesson where id = v_lesson) <> 1 then
+    raise exception 'record_attempt: completion time changed or score not updated';
+  end if;
+
+  -- Out-of-range mastery violates the check and rolls back the whole attempt.
+  begin
+    perform record_attempt(v_lesson, 0.3, '[]'::jsonb, v_child, 'Math', '[{"skill":"s-one","mastery":1.5}]'::jsonb);
+    raise exception 'record_attempt: accepted mastery 1.5';
+  exception when check_violation then null;
+  end;
+  if exists (select 1 from attempt where lesson_id = v_lesson and score = 0.3) then
+    raise exception 'record_attempt: partial insert left behind';
+  end if;
+  raise notice 'record_attempt: ok';
+end $$;
+
 rollback;

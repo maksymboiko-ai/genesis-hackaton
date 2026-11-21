@@ -130,6 +130,20 @@ export interface Store {
   /** Marks failed; only from 'generating'. */
   failLesson(id: string): Promise<void>;
 
+  // --- attempt ---
+  /**
+   * In one transaction: inserts the attempt, completes the lesson (first
+   * completion time kept), sets last_score, upserts the given mastery values.
+   */
+  recordAttempt(input: {
+    lessonId: string;
+    score: number;
+    results: unknown;
+    childId: string;
+    subject: string;
+    mastery: { skill: string; mastery: number }[];
+  }): Promise<string>;
+
   // --- book_chunk ---
   countChunks(bookId: string, sectionIndex: number): Promise<number>;
   /** Chunks of one section in reading order. */
