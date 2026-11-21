@@ -90,6 +90,13 @@ html {
   -webkit-text-size-adjust: 100%;
 }
 
+*,
+::before,
+::after,
+::placeholder {
+  font-variant-ligatures: no-common-ligatures !important;
+}
+
 button,
 a,
 label {
@@ -104,6 +111,7 @@ body {
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  font-variant-ligatures: no-common-ligatures;
 }
 
 @layer base {
@@ -1162,5 +1170,4 @@ button.cardx:hover {
   }
 }
 }
-
 

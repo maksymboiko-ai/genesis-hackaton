@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertCircle, BookOpen, Check, ChevronDown, Upload, X } from 'lucide-react'
+import { AlertCircle, BookOpen, Check, ChevronDown, FileText, Upload, X } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import { Button } from '@/components/Button'
@@ -51,7 +51,7 @@ function Books({ bookId, onPick }: { bookId: string | null; onPick: (bookId: str
   }
 
   return (
-    <div className="flex flex-col gap-2 pt-2.5">
+    <div className="flex flex-col gap-1.5 px-2.5 pb-2.5">
       {error && <p className="sm">Your textbooks could not be loaded.</p>}
       {data?.books.map((book) =>
         book.status === 'ready' ? (
@@ -60,10 +60,12 @@ function Books({ bookId, onPick }: { bookId: string | null; onPick: (bookId: str
             type="button"
             role="checkbox"
             aria-checked={book.id === bookId}
-            className={`opt a-rise ${book.id === bookId ? 'on' : ''}`}
+            className={`book-row a-rise ${book.id === bookId ? 'on' : ''}`}
             onClick={() => onPick(book.id === bookId ? null : book.id)}
           >
-            <span className="book" />
+            <span className="grid size-11 flex-none place-items-center rounded-[12px] bg-sci-tint text-sci-ink">
+              <FileText size={22} strokeWidth={2} aria-hidden="true" />
+            </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate">{book.title}</span>
               <span className="sm" style={{ color: 'var(--sci-ink)', fontWeight: 700 }}>
@@ -75,8 +77,10 @@ function Books({ bookId, onPick }: { bookId: string | null; onPick: (bookId: str
             </span>
           </button>
         ) : (
-          <div key={book.id} className="opt a-rise" style={{ cursor: 'default' }}>
-            <span className="book pending" />
+          <div key={book.id} className="book-row a-rise" style={{ cursor: 'default' }}>
+            <span className="grid size-11 flex-none place-items-center rounded-[12px] bg-surface-2 text-muted">
+              <FileText size={22} strokeWidth={2} aria-hidden="true" />
+            </span>
             <span className="flex min-w-0 flex-1 flex-col gap-1.5">
               <span className="truncate">{book.title}</span>
               {book.status === 'processing' ? (
@@ -98,10 +102,10 @@ function Books({ bookId, onPick }: { bookId: string | null; onPick: (bookId: str
         ),
       )}
       <input ref={fileRef} type="file" accept="application/pdf,.pdf" className="sr-only" tabIndex={-1} onChange={upload} />
-      <Button variant="secondary" size="sm" block busy={uploading} onClick={() => fileRef.current?.click()} style={{ height: 48 }}>
-        {!uploading && <Upload size={18} strokeWidth={2.4} aria-hidden="true" />}
+      <button type="button" className="book-upload" disabled={uploading} onClick={() => fileRef.current?.click()}>
+        {uploading ? <span className="spin" aria-hidden="true" /> : <Upload size={18} strokeWidth={2.4} aria-hidden="true" />}
         {uploading ? 'Uploading…' : 'Upload a PDF'}
-      </Button>
+      </button>
       {uploadError && (
         <p role="alert" className="sm flex items-center gap-1.5" style={{ color: 'var(--danger)', fontWeight: 700 }}>
           <AlertCircle size={16} aria-hidden="true" />
@@ -263,22 +267,27 @@ export function NewPlanDialog({
                 onChange={(event) => onChange({ ...draft, goal: event.target.value })}
               />
 
-              <div>
+              <div className="book-panel">
                 <button
                   type="button"
-                  className="flex min-h-11 items-center gap-2 rounded-lg text-[15px] font-bold"
+                  className="book-toggle"
                   aria-expanded={bookOpen}
                   onClick={() => setBookOpen(!bookOpen)}
                 >
-                  <BookOpen size={18} strokeWidth={2.2} aria-hidden="true" />
-                  Teach from a textbook
-                  <span className="sm" style={{ fontWeight: 500 }}>
-                    · optional
+                  <span className="grid size-9 flex-none place-items-center rounded-[10px] bg-white">
+                    <BookOpen size={18} strokeWidth={2.2} aria-hidden="true" />
+                  </span>
+                  <span className="flex min-w-0 flex-col text-left">
+                    <span className="text-[15px] leading-tight font-bold">Teach from a textbook</span>
+                    <span className="sm" style={{ fontSize: 13 }}>
+                      Optional. Lessons follow your PDF.
+                    </span>
                   </span>
                   <ChevronDown
-                    size={18}
+                    size={20}
                     strokeWidth={2.4}
                     aria-hidden="true"
+                    className="ml-auto flex-none"
                     style={{ transition: 'transform 220ms var(--ease)', transform: bookOpen ? 'rotate(180deg)' : undefined }}
                   />
                 </button>

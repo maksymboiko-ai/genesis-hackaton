@@ -27,6 +27,7 @@ import {
   planChanges,
 } from './data'
 import type { PlanChange } from './data'
+import { FirstPlan } from './FirstPlan'
 import { EMPTY_DRAFT, NewPlanDialog } from './NewPlanDialog'
 import type { PlanDraft } from './NewPlanDialog'
 import './product.css'
@@ -194,24 +195,26 @@ function LessonsTab({
 
   if (plans.length === 0 && !building) {
     return (
-      <div className="stagger mx-auto flex w-full max-w-[420px] flex-col gap-[22px] md:pt-6">
-        <div className="mt-3 grid grid-cols-3 gap-2.5" aria-hidden="true">
+      <div className="grid gap-[22px] lg:grid-cols-2 lg:items-center lg:gap-10 lg:pt-4">
+        <div className="stagger grid grid-cols-3 gap-2.5 md:gap-4 lg:order-2" aria-hidden="true">
           {SUBJECT_KEYS.map((key) => (
             <span key={key} className={`tile aspect-square w-full ${SUBJECTS[key].className}`} style={{ borderRadius: 26 }}>
               <SubjectIcon subject={key} size={40} />
             </span>
           ))}
         </div>
-        <div className="flex flex-col gap-2">
-          <h1 className="q" style={{ fontSize: 26 }}>
-            No lessons yet
-          </h1>
-          <p className="sub">A grown-up can make the first plan in about a minute.</p>
+        <div className="stagger flex flex-col gap-[22px] lg:order-1">
+          <div className="flex flex-col gap-2">
+            <h1 className="q" style={{ fontSize: 'clamp(26px, 3.4vw, 38px)' }}>
+              No lessons yet
+            </h1>
+            <p className="sub">A grown-up can make the first plan in about a minute.</p>
+          </div>
+          <Button onClick={onNewPlan} className="w-full lg:w-auto lg:self-start">
+            <Plus size={20} strokeWidth={2.4} aria-hidden="true" />
+            Make {child.name}’s first plan
+          </Button>
         </div>
-        <Button block onClick={onNewPlan}>
-          <Plus size={20} strokeWidth={2.4} aria-hidden="true" />
-          Make {child.name}’s first plan
-        </Button>
       </div>
     )
   }
@@ -337,15 +340,21 @@ function ParentsTab({
   building,
   freshId,
   onNewPlan,
+  onPickSubject,
 }: {
   child: Child
   plans: Curriculum[]
   building: SubjectKey | null
   freshId: string | null
   onNewPlan: () => void
+  onPickSubject: (subject: SubjectKey) => void
 }) {
   const changes = planChanges(plans)
   const average = averageScore(plans)
+
+  if (plans.length === 0 && !building) {
+    return <FirstPlan name={child.name} onNewPlan={onNewPlan} onPickSubject={onPickSubject} />
+  }
 
   return (
     <div className="stagger flex flex-col gap-[18px] md:gap-6">
@@ -380,14 +389,6 @@ function ParentsTab({
               {child.name}’s progress →
             </Link>
           </div>
-          {plans.length === 0 && !building && (
-            <div className="flex flex-col gap-2 rounded-[22px] bg-surface-2 p-[22px]">
-              <p className="text-lg leading-snug font-bold">No plans for {child.name} yet</p>
-              <p className="sub" style={{ fontSize: 16 }}>
-                Describe one thing to work on. The first plan takes about 10 seconds.
-              </p>
-            </div>
-          )}
           {plans.map((plan) => (
             <PlanRow key={plan.id} plan={plan} fresh={plan.id === freshId} />
           ))}
@@ -434,6 +435,11 @@ export function HomePage() {
   function openDialog() {
     setBuildError('')
     setDialogOpen(true)
+  }
+
+  function openForSubject(subject: SubjectKey) {
+    setDraft({ ...EMPTY_DRAFT, subject })
+    openDialog()
   }
 
   async function build() {
@@ -496,7 +502,14 @@ export function HomePage() {
             {tab === 'lessons' ? (
               <LessonsTab child={child} plans={plans.data!} building={building} freshId={freshId} onNewPlan={openDialog} />
             ) : (
-              <ParentsTab child={child} plans={plans.data!} building={building} freshId={freshId} onNewPlan={openDialog} />
+              <ParentsTab
+                child={child}
+                plans={plans.data!}
+                building={building}
+                freshId={freshId}
+                onNewPlan={openDialog}
+                onPickSubject={openForSubject}
+              />
             )}
           </div>
         )}
