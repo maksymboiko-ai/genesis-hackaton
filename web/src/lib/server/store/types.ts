@@ -84,6 +84,15 @@ export type NewLesson = {
   bookSectionIndex: number | null;
 };
 
+export type AttemptRow = {
+  id: string;
+  lessonId: string;
+  score: number;
+  // QuestionResult[] (jsonb).
+  results: unknown;
+  createdAt: string;
+};
+
 export type ChunkHit = { chunkIndex: number; content: string };
 
 export interface Store {
@@ -143,6 +152,28 @@ export interface Store {
     subject: string;
     mastery: { skill: string; mastery: number }[];
   }): Promise<string>;
+
+  /** Attempts on a curriculum's lessons after sinceIso (all if null), newest first. */
+  listCurriculumAttempts(curriculumId: string, sinceIso: string | null, limit: number): Promise<AttemptRow[]>;
+  /** A child's latest attempts across their latest curricula, newest first. */
+  listChildAttempts(childId: string, limit: number): Promise<AttemptRow[]>;
+
+  // --- replan ---
+  /** Moves the curriculum to 'running' if idle or stale. True for the claimer. */
+  claimReplan(curriculumId: string, staleBeforeIso: string): Promise<boolean>;
+  /**
+   * In one transaction: shifts lessons at or after insertAt, inserts the new
+   * lessons there, writes the replan event, sets last_replan_at, back to idle.
+   */
+  applyReplan(input: {
+    curriculumId: string;
+    insertAt: number;
+    lessons: NewLesson[];
+    trigger: "struggling" | "excelling";
+    diagnosis: unknown;
+  }): Promise<string[]>;
+  /** Back to 'idle' after a failed replan, without touching last_replan_at. */
+  releaseReplan(curriculumId: string): Promise<void>;
 
   // --- book_chunk ---
   countChunks(bookId: string, sectionIndex: number): Promise<number>;

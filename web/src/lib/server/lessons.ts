@@ -21,7 +21,10 @@ const MAX_BODY_CHARS = 30_000;
 const MAX_PREVIOUS_TITLES = 20;
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
-const claim = (id: string) => getStore().claimLesson(id, ago(STALE_JOB_MS), ago(RETRY_COOLDOWN_MS));
+/** Claims a lesson for generation; true only for the one caller that wins. */
+export const claimLessonForGeneration = (id: string) =>
+  getStore().claimLesson(id, ago(STALE_JOB_MS), ago(RETRY_COOLDOWN_MS));
+const claim = claimLessonForGeneration;
 
 /** Parses stored content; null if it is missing or malformed. */
 export function readContent(row: LessonRow): LessonContent | null {

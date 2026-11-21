@@ -26,11 +26,15 @@
 
 Add migration `0003_backend_functions.sql` (new file; `0001`/`0002` stay unchanged):
 
-- **Three Postgres functions**, called with `db.rpc(...)`, each one transaction:
-  - `create_curriculum(...)`: inserts the curriculum and its lessons, returns the ids;
+- **Three write functions**, called with `db.rpc(...)`, each one transaction:
+  - `create_curriculum(...)`: inserts the curriculum and its lessons, returns the id;
   - `record_attempt(...)`: inserts the attempt, completes the lesson, upserts mastery;
   - `apply_replan(...)`: shifts positions, inserts lessons, writes `replan_event`,
     sets `last_replan_at` and `replan_status = 'idle'`.
+- **Two claim functions**, so exactly one caller starts a background job:
+  - `claim_lesson(id, stale_before, retry_before)`: `pending → generating`; also
+    reclaims a dead `generating` job and retries a `failed` lesson after a cooldown;
+  - `claim_replan(id, stale_before)`: `idle → running`; also reclaims a dead replan.
 
   Plain parameters only, no dynamic SQL. Business rules (grading, mastery
   formula, replan rule) stay in TypeScript; the functions only write.
@@ -40,6 +44,7 @@ Add migration `0003_backend_functions.sql` (new file; `0001`/`0002` stay unchang
   - `curriculum.replan_started_at timestamptz`: set when a replan is claimed (`idle → running`).
 
   A row older than 3 minutes in `generating`/`running` counts as failed and can be claimed again.
+  A `failed` lesson is retried when opened, but only 60 s after the failed attempt, so polling never loops on paid retries.
 
 ## Consequences
 
@@ -48,4 +53,5 @@ Add migration `0003_backend_functions.sql` (new file; `0001`/`0002` stay unchang
 - ✅ No change to `contracts/api.ts`: Frontend code is unaffected.
 - ✅ No change to `contracts/ai.ts`: the AI module is unaffected.
 - ⚠️ Some write logic lives in SQL; it must be reviewed together with the TypeScript that calls it.
+- ✅ Tested on Postgres 16 + pgvector: `supabase/tests/0003_backend_functions.sql` (atomicity cases included).
 - ⚠️ The migration must be applied to the shared Supabase project before backend modules M2–M5 are deployed.

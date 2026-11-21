@@ -2,6 +2,7 @@ import "server-only";
 import { createClient, type PostgrestError, type SupabaseClient } from "@supabase/supabase-js";
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
+  AttemptRow,
   BookRow,
   ChunkHit,
   ChildRow,
@@ -121,6 +122,16 @@ export const lessonJson = (l: NewLesson) => ({
   skills: l.skills,
   retry_of_lesson_id: l.retryOfLessonId,
   book_section_index: l.bookSectionIndex,
+});
+
+type AttemptDb = { id: string; lesson_id: string; score: number; results: unknown; created_at: string };
+const ATTEMPT_COLUMNS = "id, lesson_id, score, results, created_at";
+const toAttempt = (r: AttemptDb): AttemptRow => ({
+  id: r.id,
+  lessonId: r.lesson_id,
+  score: r.score,
+  results: r.results,
+  createdAt: r.created_at,
 });
 
 export class SupabaseStore implements Store {
@@ -295,6 +306,72 @@ export class SupabaseStore implements Store {
     });
     check(error, "record_attempt");
     return data as string;
+  }
+
+  private async attemptsFor(lessonIds: string[], sinceIso: string | null, limit: number) {
+    if (lessonIds.length === 0) return [];
+    let query = this.db.from("attempt").select(ATTEMPT_COLUMNS).in("lesson_id", lessonIds);
+    if (sinceIso) query = query.gt("created_at", sinceIso);
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(limit);
+    check(error, "list attempt");
+    return (data as AttemptDb[]).map(toAttempt);
+  }
+
+  async listCurriculumAttempts(curriculumId: string, sinceIso: string | null, limit: number) {
+    const { data, error } = await this.db.from("lesson").select("id").eq("curriculum_id", curriculumId);
+    check(error, "list lesson ids");
+    return this.attemptsFor((data as { id: string }[]).map((r) => r.id), sinceIso, limit);
+  }
+
+  async listChildAttempts(childId: string, limit: number) {
+    // The latest few curricula keep the lesson id list (a URL filter) short.
+    const { data: curricula, error: e1 } = await this.db
+      .from("curriculum")
+      .select("id")
+      .eq("child_id", childId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    check(e1, "list curriculum ids");
+    const ids = (curricula as { id: string }[]).map((r) => r.id);
+    if (ids.length === 0) return [];
+    const { data: lessons, error: e2 } = await this.db.from("lesson").select("id").in("curriculum_id", ids);
+    check(e2, "list lesson ids");
+    return this.attemptsFor((lessons as { id: string }[]).map((r) => r.id), null, limit);
+  }
+
+  async claimReplan(curriculumId: string, staleBeforeIso: string) {
+    const { data, error } = await this.db.rpc("claim_replan", {
+      p_curriculum_id: curriculumId,
+      p_stale_before: staleBeforeIso,
+    });
+    check(error, "claim_replan");
+    return data === true;
+  }
+
+  async applyReplan(input: {
+    curriculumId: string;
+    insertAt: number;
+    lessons: NewLesson[];
+    trigger: "struggling" | "excelling";
+    diagnosis: unknown;
+  }) {
+    const { data, error } = await this.db.rpc("apply_replan", {
+      p_curriculum_id: input.curriculumId,
+      p_insert_at: input.insertAt,
+      p_lessons: input.lessons.map(lessonJson),
+      p_trigger: input.trigger,
+      p_diagnosis: input.diagnosis,
+    });
+    check(error, "apply_replan");
+    return (data as string[] | null) ?? [];
+  }
+
+  async releaseReplan(curriculumId: string) {
+    const { error } = await this.db
+      .from("curriculum")
+      .update({ replan_status: "idle", replan_started_at: null })
+      .eq("id", curriculumId);
+    check(error, "release replan");
   }
 
   async countChunks(bookId: string, sectionIndex: number) {

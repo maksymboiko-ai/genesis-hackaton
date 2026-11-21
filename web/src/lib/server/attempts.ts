@@ -3,6 +3,7 @@ import type { SubmitAttemptRequest, SubmitAttemptResponse } from "@/contracts/ap
 import { conflict, notFound } from "./errors";
 import { gradeAttempt, nextMastery, skillScores } from "./grading";
 import { readContent } from "./lessons";
+import { maybeStartReplan, startLearnerNotesRefresh } from "./replan";
 import { getStore } from "./store";
 
 /**
@@ -39,5 +40,9 @@ export async function submitAttempt(lessonId: string, body: SubmitAttemptRequest
   const lessons = await store.listLessons(curriculum.id);
   const next = lessons.find((l) => !l.completedAt);
 
-  return { attemptId, score, results, replanTriggered: null, nextLessonId: next?.id ?? null };
+  // Code decides when to replan; the replan and the notes run after the response.
+  const replanTriggered = await maybeStartReplan(curriculum.id);
+  startLearnerNotesRefresh(curriculum.childId);
+
+  return { attemptId, score, results, replanTriggered, nextLessonId: next?.id ?? null };
 }

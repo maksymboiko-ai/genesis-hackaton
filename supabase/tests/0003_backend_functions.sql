@@ -153,4 +153,80 @@ begin
   raise notice 'record_attempt: ok';
 end $$;
 
+-- claim_replan, apply_replan ---------------------------------------------------
+do $$
+declare
+  v_cur uuid := (select id from t_ids where name = 'curriculum');
+  v_ids uuid[];
+  v_titles text[];
+  v_positions int[];
+  v_first uuid;
+begin
+  if not claim_replan(v_cur, now() - interval '3 minutes') then
+    raise exception 'claim_replan: first claim failed';
+  end if;
+  if claim_replan(v_cur, now() - interval '3 minutes') then
+    raise exception 'claim_replan: second claim succeeded while running';
+  end if;
+  update curriculum set replan_started_at = now() - interval '10 minutes' where id = v_cur;
+  if not claim_replan(v_cur, now() - interval '3 minutes') then
+    raise exception 'claim_replan: stale replan not reclaimed';
+  end if;
+
+  -- Lessons A(0) B(1) C(2); insert two after B, i.e. at position 2.
+  select id into v_first from lesson where curriculum_id = v_cur and position = 0;
+  v_ids := apply_replan(v_cur, 2,
+    jsonb_build_array(
+      jsonb_build_object('kind','remedial','title','R','objective','r','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',null,'book_section_index',null),
+      jsonb_build_object('kind','retry','title','A','objective','a','skills',jsonb_build_array('s-one'),'retry_of_lesson_id',v_first,'book_section_index',2)),
+    'struggling', '{"summary":"s","mistakes":[],"missingSkills":["s-one"]}'::jsonb);
+
+  if array_length(v_ids, 1) <> 2 then
+    raise exception 'apply_replan: wrong ids %', v_ids;
+  end if;
+  select array_agg(title order by position), array_agg(position order by position)
+    into v_titles, v_positions from lesson where curriculum_id = v_cur;
+  if v_titles <> array['A','B','R','A','C'] or v_positions <> array[0,1,2,3,4] then
+    raise exception 'apply_replan: wrong order % %', v_titles, v_positions;
+  end if;
+  if (select retry_of_lesson_id from lesson where id = v_ids[2]) <> v_first
+     or (select book_section_index from lesson where id = v_ids[2]) <> 2
+     or (select kind from lesson where id = v_ids[1]) <> 'remedial' then
+    raise exception 'apply_replan: wrong lesson fields';
+  end if;
+  if (select replan_status from curriculum where id = v_cur) <> 'idle'
+     or (select last_replan_at from curriculum where id = v_cur) is null
+     or (select replan_started_at from curriculum where id = v_cur) is not null then
+    raise exception 'apply_replan: curriculum not released';
+  end if;
+  if (select inserted_lesson_ids from replan_event where curriculum_id = v_cur) <> v_ids then
+    raise exception 'apply_replan: event ids wrong';
+  end if;
+
+  -- Append at the end (excelling).
+  v_ids := apply_replan(v_cur, 5,
+    jsonb_build_array(jsonb_build_object('kind','extension','title','E','objective','e','skills',jsonb_build_array('s-x'))),
+    'excelling', '{"summary":"s","mistakes":[],"missingSkills":[]}'::jsonb);
+  select array_agg(title order by position) into v_titles from lesson where curriculum_id = v_cur;
+  if v_titles <> array['A','B','R','A','C','E'] then
+    raise exception 'apply_replan: append wrong %', v_titles;
+  end if;
+
+  -- A bad lesson kind rolls everything back: positions, event and status.
+  perform claim_replan(v_cur, now());
+  begin
+    perform apply_replan(v_cur, 0,
+      jsonb_build_array(jsonb_build_object('kind','bogus','title','X','objective','x')),
+      'struggling', '{}'::jsonb);
+    raise exception 'apply_replan: accepted a bad kind';
+  exception when check_violation then null;
+  end;
+  select array_agg(position order by position) into v_positions from lesson where curriculum_id = v_cur;
+  if v_positions <> array[0,1,2,3,4,5] or (select count(*) from replan_event where curriculum_id = v_cur) <> 2
+     or (select replan_status from curriculum where id = v_cur) <> 'running' then
+    raise exception 'apply_replan: partial write left behind';
+  end if;
+  raise notice 'claim_replan / apply_replan: ok';
+end $$;
+
 rollback;

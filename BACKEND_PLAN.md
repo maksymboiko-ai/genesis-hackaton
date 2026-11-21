@@ -168,11 +168,11 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | F4 | list/get curricula | M2 | ✅ | list newest first; unknown child → 404 |
 | F5 | lesson generation + retrieval | M3 | ✅ | `claim_lesson` RPC; next pending lesson prefetched in the same job; content bounded (≤ 10 questions, 4 choices, slugs, markdown sanitized); answers stripped by `GetLessonResponse` |
 | F6 | attempts, grading, mastery | M4 | ✅ | graded in code; `record_attempt` RPC (attempt + completion + mastery in one transaction); ≤ 10 answers, `chosenIndex` 0–3 at the edge |
-| F7 | replan | M5 | ❌ | — |
-| F8 | learner notes | M5 | ❌ | — |
+| F7 | replan | M5 | ✅ | rule in code with contract constants; `claim_replan` + `apply_replan` RPCs; remedial + retries before the next unfinished lesson, extensions appended; ≤ 4 model lessons; failure → idle, nothing written; first new lesson pre-generated |
+| F8 | learner notes | M5 | ✅ | after every attempt, from the latest 5 attempts across subjects; capped at 2000 chars; no names sent |
 | F9 | llm_call logging | M0 | ✅ | `lib/server/ai.ts` wraps every `AiService` call: `onCall` → `llm_call`, fire-and-forget |
 | F10 | security baseline | M0–M7 | 🟡 | M0: Zod helpers, 64 KB body cap, error envelope, rate limiter, daily budget, `server-only`, env check |
-| F11 | claims, failure reset, stuck recovery | M3, M5 | 🟡 | lessons done: stale `generating` reclaimed after 3 min, `failed` retried on open after a 60 s cooldown; replan part in M5 |
+| F11 | claims, failure reset, stuck recovery | M3, M5 | ✅ | stale `generating`/`running` reclaimed after 3 min; `failed` lesson retried on open after a 60 s cooldown; failed replan releases to idle |
 | F12 | fake/real AiService switch | M0, M7 | 🟡 | `AI_MODE=fake\|real`; fake done (M0), real wiring in M7 |
 
 ### Modules
@@ -184,7 +184,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | M2 Curricula | ✅ | ✅ 9 tests + SQL test | ✅ | ✅ |
 | M3 Lessons | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M4 Attempts | ✅ | ✅ 7 tests + SQL test | ✅ | ✅ |
-| M5 Replan | ❌ | ❌ | ❌ | ❌ |
+| M5 Replan | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M6 Books | ❌ | ❌ | ❌ | ❌ |
 | M7 Hardening | ❌ | ❌ | ❌ | ❌ |
 
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 13:52 | M5 | Background jobs ran before the response in tests, hiding the `running` state → test runner now defers jobs like `after()`; child-attempt query limited to the 5 latest curricula (URL length) | A replan that keeps failing is retried on every following attempt (one model call each) |
 | 13:44 | M4 | Contract leaves `answers` unbounded → capped at 10 and `chosenIndex` 0–3 at the edge; re-attempt kept the first completion time | Double submit stores two attempts (counts twice in the replan window) |
 | 13:40 | M3 | A `failed` lesson was reclaimed on every poll: the UI never saw `failed` and a model outage meant endless paid retries → 60 s retry cooldown in `claim_lesson` | — |
 | 13:35 | M2 | Model returning questions after answers would loop → now a 502; book with a broken section map → 500 instead of a bad plan | — |
@@ -207,6 +208,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 - **Store layer.** Services talk to a `Store` interface (`lib/server/store/`) with two implementations: `SupabaseStore` (production) and `MemoryStore` (tests and `STORE=memory` local runs without a database). This is what makes every route testable without Supabase.
 - **`vitest@3`**, not 4: vitest 4 needs `@types/node` ≥ 22 and the app pins `^20`.
 - `GET /api/health` stays as a deploy check.
+- **Remedial placement.** Inserted before the next lesson the child has not done (the frontend mock inserts one lesson later).
 - **Failed lessons.** Not in the original plan: opening a `failed` lesson retries it, but only 60 s after the failed attempt.
 - **SQL tests.** `supabase/tests/0003_backend_functions.sql` checks the new functions (atomicity included) on a scratch Postgres 16 + pgvector database.
 

@@ -108,3 +108,86 @@ begin
   return v_id;
 end;
 $$;
+
+-- Starts a replan. True only for the one caller that moved the curriculum to
+-- 'running': from 'idle', or from a 'running' replan that started before
+-- p_stale_before (a dead job).
+create function claim_replan(p_curriculum_id uuid, p_stale_before timestamptz)
+returns boolean
+language sql
+as $$
+  with claimed as (
+    update curriculum
+       set replan_status = 'running',
+           replan_started_at = now()
+     where id = p_curriculum_id
+       and (replan_status = 'idle'
+            or (replan_status = 'running'
+                and (replan_started_at is null or replan_started_at < p_stale_before)))
+    returning 1
+  )
+  select exists (select 1 from claimed);
+$$;
+
+-- Applies a replan in one transaction: shifts the lessons at or after
+-- p_insert_at down by the number of new lessons, inserts the new lessons at
+-- p_insert_at.., writes the replan_event, sets last_replan_at and returns the
+-- curriculum to 'idle'. Returns the new lesson ids in position order.
+create function apply_replan(
+  p_curriculum_id uuid,
+  p_insert_at     int,
+  p_lessons       jsonb,
+  p_trigger       text,
+  p_diagnosis     jsonb
+)
+returns uuid[]
+language plpgsql
+as $$
+declare
+  v_lessons jsonb := coalesce(p_lessons, '[]'::jsonb);
+  v_n int;
+  v_ids uuid[];
+begin
+  if jsonb_typeof(v_lessons) <> 'array' then
+    raise exception 'p_lessons must be an array';
+  end if;
+  v_n := jsonb_array_length(v_lessons);
+
+  -- Serializes replans of one curriculum.
+  perform 1 from curriculum where id = p_curriculum_id for update;
+  if not found then
+    raise exception 'curriculum % not found', p_curriculum_id;
+  end if;
+
+  update lesson
+     set position = position + v_n
+   where curriculum_id = p_curriculum_id
+     and position >= p_insert_at;
+
+  with inserted as (
+    insert into lesson (curriculum_id, position, kind, title, objective, skills, retry_of_lesson_id, book_section_index)
+    select p_curriculum_id,
+           p_insert_at + (l.ord - 1)::int,
+           l.value->>'kind',
+           l.value->>'title',
+           l.value->>'objective',
+           coalesce(array(select jsonb_array_elements_text(l.value->'skills')), '{}'),
+           (l.value->>'retry_of_lesson_id')::uuid,
+           (l.value->>'book_section_index')::int
+    from jsonb_array_elements(v_lessons) with ordinality as l(value, ord)
+    returning id, position
+  )
+  select coalesce(array_agg(id order by position), '{}') into v_ids from inserted;
+
+  insert into replan_event (curriculum_id, trigger, diagnosis, inserted_lesson_ids)
+  values (p_curriculum_id, p_trigger, p_diagnosis, v_ids);
+
+  update curriculum
+     set last_replan_at = now(),
+         replan_status = 'idle',
+         replan_started_at = null
+   where id = p_curriculum_id;
+
+  return v_ids;
+end;
+$$;

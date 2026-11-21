@@ -1,6 +1,7 @@
 import "server-only";
 import type { LlmCallRecord } from "@/contracts/ai";
 import type {
+  AttemptRow,
   BookRow,
   ChunkHit,
   ChildRow,
@@ -26,7 +27,7 @@ export type MemoryData = {
   llmCalls: LlmCallRow[];
 };
 
-export type AttemptRow = { id: string; lessonId: string; score: number; results: unknown; createdAt: string };
+
 
 export type ChunkRow = { bookId: string; chunkIndex: number; content: string; sectionIndex: number; embedding: number[] };
 
@@ -231,6 +232,74 @@ export class MemoryStore implements Store {
       else this.data.mastery.push({ childId: input.childId, subject: input.subject, skill: m.skill, mastery: m.mastery });
     }
     return id;
+  }
+
+  async listCurriculumAttempts(curriculumId: string, sinceIso: string | null, limit: number) {
+    const ids = new Set(this.data.lessons.filter((l) => l.curriculumId === curriculumId).map((l) => l.id));
+    return copy(
+      this.data.attempts
+        .filter((a) => ids.has(a.lessonId) && (sinceIso === null || a.createdAt > sinceIso))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit),
+    );
+  }
+
+  async listChildAttempts(childId: string, limit: number) {
+    const curricula = new Set(this.data.curricula.filter((c) => c.childId === childId).map((c) => c.id));
+    const lessons = new Set(this.data.lessons.filter((l) => curricula.has(l.curriculumId)).map((l) => l.id));
+    return copy(
+      this.data.attempts
+        .filter((a) => lessons.has(a.lessonId))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, limit),
+    );
+  }
+
+  async claimReplan(curriculumId: string, staleBeforeIso: string) {
+    const row = this.data.curricula.find((c) => c.id === curriculumId);
+    if (!row) return false;
+    const stale = row.replanStatus === "running" && (!row.replanStartedAt || row.replanStartedAt < staleBeforeIso);
+    if (row.replanStatus !== "idle" && !stale) return false;
+    row.replanStatus = "running";
+    row.replanStartedAt = now();
+    return true;
+  }
+
+  async applyReplan(input: {
+    curriculumId: string;
+    insertAt: number;
+    lessons: NewLesson[];
+    trigger: "struggling" | "excelling";
+    diagnosis: unknown;
+  }) {
+    const curriculum = this.data.curricula.find((c) => c.id === input.curriculumId);
+    if (!curriculum) throw new Error("curriculum not found");
+    const rows = input.lessons.map((l, i) => this.newLessonRow(input.curriculumId, input.insertAt + i, l));
+    for (const l of this.data.lessons) {
+      if (l.curriculumId === input.curriculumId && l.position >= input.insertAt) l.position += rows.length;
+    }
+    this.data.lessons.push(...rows);
+    const ids = rows.map((r) => r.id);
+    this.data.replanEvents.push({
+      id: uuid(),
+      curriculumId: input.curriculumId,
+      trigger: input.trigger,
+      diagnosis: copy(input.diagnosis),
+      insertedLessonIds: ids,
+      createdAt: now(),
+    });
+    curriculum.lastReplanAt = now();
+    curriculum.replanStatus = "idle";
+    curriculum.replanStartedAt = null;
+    return ids;
+  }
+
+  async releaseReplan(curriculumId: string) {
+    const row = this.data.curricula.find((c) => c.id === curriculumId);
+    if (row) {
+      row.replanStatus = "idle";
+      row.replanStartedAt = null;
+    }
   }
 
   async countChunks(bookId: string, sectionIndex: number) {
