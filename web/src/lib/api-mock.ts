@@ -5,6 +5,7 @@ import {
   REPLAN_WINDOW,
   STRUGGLING_BELOW,
 } from '@/contracts/domain'
+import { TRIAL_DAYS } from '@/contracts/domain'
 import type {
   Book,
   Child,
@@ -16,14 +17,17 @@ import type {
   ReplanEvent,
   ReplanTrigger,
   SkillMastery,
+  Subscription,
 } from '@/contracts/domain'
 import {
   CreateBookRequest,
   CreateChildRequest,
   CreateCurriculumRequest,
+  StartTrialRequest,
   SubmitAttemptRequest,
 } from '@/contracts/api'
 import type { ApiError } from '@/contracts/api'
+import { computeAnalytics } from './analytics'
 import { MOCK_LESSONS } from './api-mock-lessons'
 import { gradeSubjectFor } from '@/contracts/subjects'
 import { subjectKey } from './subjects'
@@ -56,6 +60,7 @@ type Db = {
   // Mock accounts. Passwords are kept as typed: this is a local demo only.
   accounts: { id: string; name: string; email: string; password: string }[]
   signedIn: string | null
+  subscriptions: (Subscription & { accountId: string })[]
 }
 
 const STORAGE_KEY = 'mock-api'
@@ -149,6 +154,7 @@ function load(): Db {
     mastery: [],
     accounts: [],
     signedIn: null,
+    subscriptions: [],
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -483,6 +489,56 @@ function auth(db: Db, action: string, body: unknown) {
   }
 }
 
+function startTrial(db: Db, raw: unknown) {
+  const account = db.accounts.find((candidate) => candidate.id === db.signedIn)
+  if (!account) throw new MockError(401, 'unauthorized', 'Sign in to continue.')
+  let subscription = db.subscriptions.find((candidate) => candidate.accountId === account.id)
+  if (!subscription) {
+    const now = Date.now()
+    subscription = {
+      accountId: account.id,
+      plan: parseBody<StartTrialRequest>(StartTrialRequest, raw).plan,
+      trialStartedAt: new Date(now).toISOString(),
+      trialEndsAt: new Date(now + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+      paidAt: null,
+    }
+    db.subscriptions.push(subscription)
+  }
+  return omit(subscription, 'accountId')
+}
+
+// The dashboard over this browser's mock data. There are no model calls and
+// no admin list here: any signed-in mock account may look.
+function adminAnalytics(db: Db) {
+  if (!db.signedIn) throw new MockError(401, 'unauthorized', 'Sign in to continue.')
+  const now = Date.now()
+  return computeAnalytics(
+    {
+      // The mock keeps no dates for children; count them as added today.
+      children: db.children.map((child) => ({ id: child.id, ownerId: db.signedIn, createdAt: new Date(now).toISOString() })),
+      curricula: db.curricula.map((plan) => ({ id: plan.id, childId: plan.childId, subject: plan.subject })),
+      lessons: db.lessons.map((lesson) => ({
+        id: lesson.id,
+        curriculumId: lesson.curriculumId,
+        kind: lesson.kind,
+        contentStatus: lesson.contentStatus,
+        completedAt: lesson.completedAt,
+        lastScore: lesson.lastScore,
+      })),
+      attempts: db.attempts.map((attempt) => ({
+        lessonId: attempt.lessonId,
+        score: attempt.score,
+        createdAt: new Date(attempt.at).toISOString(),
+      })),
+      replans: db.events.map((event) => ({ trigger: event.trigger })),
+      subscriptions: db.subscriptions.map((subscription) => ({ ...omit(subscription, 'accountId'), ownerId: subscription.accountId })),
+      llmCalls: [],
+    },
+    now,
+    0,
+  )
+}
+
 function retryLesson(db: Db, lessonId: string) {
   const lesson = find(db.lessons, lessonId, 'Lesson')
   if (lesson.contentStatus === 'failed') lesson.contentStatus = 'pending'
@@ -647,6 +703,11 @@ async function route(db: Db, method: string, parts: string[], query: URLSearchPa
       return retryLesson(db, itemId)
     case 'POST lessons/:id/attempts':
       return submitAttempt(db, itemId, body)
+    case 'POST subscription':
+      return startTrial(db, body)
+    case 'GET admin/:id':
+      if (itemId !== 'analytics') throw new MockError(404, 'not_found', 'No such endpoint.')
+      return adminAnalytics(db)
     default:
       throw new MockError(404, 'not_found', 'No such endpoint.')
   }

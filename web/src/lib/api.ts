@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import {
+  AdminAnalyticsResponse,
   ApiError,
   AuthResponse,
   CreateBookResponse,
@@ -17,6 +18,7 @@ import {
   ListCurriculaResponse,
   LogoutResponse,
   RetryLessonResponse,
+  StartTrialResponse,
   SubmitAttemptResponse,
 } from '@/contracts/api'
 import type {
@@ -24,6 +26,7 @@ import type {
   CreateCurriculumRequest,
   LoginRequest,
   SignUpRequest,
+  StartTrialRequest,
   SubmitAttemptRequest,
 } from '@/contracts/api'
 import { mockFetch } from './api-mock'
@@ -128,4 +131,10 @@ export const api = {
     request(RetryLessonResponse, `/lessons/${lessonId}/retry`, { method: 'POST' }),
   submitAttempt: (lessonId: string, body: SubmitAttemptRequest) =>
     request(SubmitAttemptResponse, `/lessons/${lessonId}/attempts`, post(body)),
+
+  // "Start free trial" on the paywall. Safe to repeat: the first trial stays.
+  startTrial: (body: StartTrialRequest) => request(StartTrialResponse, '/subscription', post(body)),
+
+  // The team's dashboard; "not_found" for accounts that are not admins.
+  adminAnalytics: () => request(AdminAnalyticsResponse, '/admin/analytics'),
 }

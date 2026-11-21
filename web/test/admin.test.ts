@@ -4,7 +4,7 @@ import { GET as getLesson } from "@/app/api/lessons/[lessonId]/route";
 import { POST as startTrial } from "@/app/api/subscription/route";
 import { AdminAnalyticsResponse, StartTrialResponse } from "@/contracts/api";
 import { GAP_CLOSED_FROM, TRIAL_DAYS } from "@/contracts/domain";
-import { AI_WINDOW_DAYS, computeAnalytics } from "@/lib/server/analytics";
+import { AI_WINDOW_DAYS, computeAnalytics } from "@/lib/analytics";
 import { flushBackground } from "@/lib/server/background";
 import { resetEnvForTests } from "@/lib/server/env";
 import type { AnalyticsRows } from "@/lib/server/store/types";
