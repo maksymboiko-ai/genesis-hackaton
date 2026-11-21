@@ -163,7 +163,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | ID | Planned | Module | Status | Actual / gaps |
 |---|---|---|---|---|
 | F1 | children + profile | M1 | ✅ | name trimmed, 1–100 chars, control chars stripped; profile never carries the name |
-| F2 | books + ingestion | M6 | ❌ | — |
+| F2 | books + ingestion | M6 | ⚠️ | upload checks (MIME + `%PDF-`, server path, title 1–200), ingestion limits (400 pages, 1.5M chars, 1500 chunks, vector size); failure → `failed` with chunks removed. **Gap:** Vercel caps request bodies at 4.5 MB, so larger PDFs fail before our 20 MB check |
 | F3 | create curriculum + clarification | M2 | ✅ | one clarification round enforced; outline bounded (≤ 12 lessons, ≤ 5 slugs each, section index checked); `create_curriculum` RPC; first lesson claimed before the response |
 | F4 | list/get curricula | M2 | ✅ | list newest first; unknown child → 404 |
 | F5 | lesson generation + retrieval | M3 | ✅ | `claim_lesson` RPC; next pending lesson prefetched in the same job; content bounded (≤ 10 questions, 4 choices, slugs, markdown sanitized); answers stripped by `GetLessonResponse` |
@@ -185,7 +185,7 @@ Status: ✅ ready · 🟡 in progress / partly · ❌ not started · ⚠️ read
 | M3 Lessons | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M4 Attempts | ✅ | ✅ 7 tests + SQL test | ✅ | ✅ |
 | M5 Replan | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
-| M6 Books | ❌ | ❌ | ❌ | ❌ |
+| M6 Books | ✅ | ✅ 13 tests + SQL test | ✅ | ✅ |
 | M7 Hardening | ❌ | ❌ | ❌ | ❌ |
 
 ### Review log
@@ -195,6 +195,7 @@ Append one line per module after its bug re-check: date/time, findings fixed, fi
 | Time | Module | Fixed | Left open |
 |---|---|---|---|
 | 13:30 | M0 | `.env.example` was ignored by `web/.gitignore` (`.env*`) → added `!.env.example`; root `.gitignore` now ignores `.env*` and `TASK_CONTEXT.md` | Rate limits are per server instance (in memory) |
+| 14:00 | M6 | Upload rate limit confirmed by tests; `match_book_chunks` checked with section filter and order | Vercel 4.5 MB body limit on uploads; chunks inserted in batches, not one transaction (cleaned up on failure) |
 | 13:52 | M5 | Background jobs ran before the response in tests, hiding the `running` state → test runner now defers jobs like `after()`; child-attempt query limited to the 5 latest curricula (URL length) | A replan that keeps failing is retried on every following attempt (one model call each) |
 | 13:44 | M4 | Contract leaves `answers` unbounded → capped at 10 and `chosenIndex` 0–3 at the edge; re-attempt kept the first completion time | Double submit stores two attempts (counts twice in the replan window) |
 | 13:40 | M3 | A `failed` lesson was reclaimed on every poll: the UI never saw `failed` and a model outage meant endless paid retries → 60 s retry cooldown in `claim_lesson` | — |

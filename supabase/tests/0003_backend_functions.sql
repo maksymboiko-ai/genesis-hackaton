@@ -229,4 +229,33 @@ begin
   raise notice 'claim_replan / apply_replan: ok';
 end $$;
 
+-- match_book_chunks (0002), as the backend calls it -----------------------------
+do $$
+declare
+  v_book uuid;
+  v_hits int[];
+begin
+  insert into book (title, storage_path, status) values ('B', 'books/b.pdf', 'ready') returning id into v_book;
+  -- Section 0: chunks 0,1; section 1: chunks 2,3. Chunk 3 points the same way as the query.
+  insert into book_chunk (book_id, chunk_index, content, embedding, section_index)
+  select v_book, i, 'c' || i,
+         (select array_agg(case when d = 1 then 1.0 else (case when i = 3 then 1.0 else 0.01 * (i + 1) end) end)
+            from generate_series(1, 1536) d)::vector,
+         case when i < 2 then 0 else 1 end
+  from generate_series(0, 3) i;
+
+  select array_agg(chunk_index) into v_hits
+  from match_book_chunks(v_book, (select array_agg(1.0) from generate_series(1, 1536))::vector, 8, 1);
+  if v_hits is null or not (v_hits <@ array[2,3]) or array_length(v_hits, 1) <> 2 or v_hits[1] <> 3 then
+    raise exception 'match_book_chunks: section filter or order wrong %', v_hits;
+  end if;
+
+  select array_agg(chunk_index) into v_hits
+  from match_book_chunks(v_book, (select array_agg(1.0) from generate_series(1, 1536))::vector, 3, null);
+  if array_length(v_hits, 1) <> 3 then
+    raise exception 'match_book_chunks: limit wrong %', v_hits;
+  end if;
+  raise notice 'match_book_chunks: ok';
+end $$;
+
 rollback;

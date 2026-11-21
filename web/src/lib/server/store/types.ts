@@ -106,8 +106,22 @@ export interface Store {
   updateChildNotes(id: string, notes: string): Promise<void>;
   listMastery(childId: string): Promise<MasteryRow[]>;
 
-  // --- book (read side; writes come with the books module) ---
+  // --- book, book_chunk, file storage ---
+  createBook(input: { title: string; storagePath: string }): Promise<BookRow>;
   getBook(id: string): Promise<BookRow | null>;
+  /** Newest first. */
+  listBooks(): Promise<BookRow[]>;
+  /** Stores the map and all chunks, then marks the book ready. */
+  completeBook(
+    id: string,
+    sections: unknown,
+    chunks: { chunkIndex: number; content: string; sectionIndex: number; embedding: number[] }[],
+  ): Promise<void>;
+  /** Marks the book failed and removes any chunks already stored. */
+  failBook(id: string): Promise<void>;
+  /** Private file storage for uploaded PDFs. */
+  uploadFile(path: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  downloadFile(path: string): Promise<Uint8Array>;
 
   // --- curriculum, lesson, replan_event ---
   /** Inserts the curriculum and its core lessons in one transaction. */

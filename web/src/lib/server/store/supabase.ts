@@ -191,6 +191,62 @@ export class SupabaseStore implements Store {
     }));
   }
 
+  async createBook(input: { title: string; storagePath: string }) {
+    const { data, error } = await this.db
+      .from("book")
+      .insert({ title: input.title, storage_path: input.storagePath })
+      .select(BOOK_COLUMNS)
+      .single();
+    check(error, "insert book");
+    return toBook(data as BookDb);
+  }
+
+  async listBooks() {
+    const { data, error } = await this.db.from("book").select(BOOK_COLUMNS).order("created_at", { ascending: false });
+    check(error, "list book");
+    return (data as BookDb[]).map(toBook);
+  }
+
+  async completeBook(
+    id: string,
+    sections: unknown,
+    chunks: { chunkIndex: number; content: string; sectionIndex: number; embedding: number[] }[],
+  ) {
+    // Batches keep each request small; failBook() cleans up after a partial insert.
+    for (let i = 0; i < chunks.length; i += 100) {
+      const { error } = await this.db.from("book_chunk").insert(
+        chunks.slice(i, i + 100).map((c) => ({
+          book_id: id,
+          chunk_index: c.chunkIndex,
+          content: c.content,
+          section_index: c.sectionIndex,
+          embedding: c.embedding,
+        })),
+      );
+      check(error, "insert book_chunk");
+    }
+    const { error } = await this.db.from("book").update({ sections, status: "ready" }).eq("id", id);
+    check(error, "complete book");
+  }
+
+  async failBook(id: string) {
+    const { error: e1 } = await this.db.from("book_chunk").delete().eq("book_id", id);
+    check(e1, "delete book_chunk");
+    const { error: e2 } = await this.db.from("book").update({ status: "failed" }).eq("id", id);
+    check(e2, "fail book");
+  }
+
+  async uploadFile(path: string, bytes: Uint8Array, contentType: string) {
+    const { error } = await this.db.storage.from(this.booksBucket).upload(path, bytes, { contentType, upsert: false });
+    if (error) throw new Error(`storage upload: ${error.message}`);
+  }
+
+  async downloadFile(path: string) {
+    const { data, error } = await this.db.storage.from(this.booksBucket).download(path);
+    if (error || !data) throw new Error(`storage download: ${error?.message ?? "empty"}`);
+    return new Uint8Array(await data.arrayBuffer());
+  }
+
   async getBook(id: string) {
     const { data, error } = await this.db.from("book").select(BOOK_COLUMNS).eq("id", id).maybeSingle();
     check(error, "get book");

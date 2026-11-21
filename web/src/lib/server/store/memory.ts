@@ -24,6 +24,7 @@ export type MemoryData = {
   replanEvents: ReplanEventRow[];
   chunks: ChunkRow[];
   attempts: AttemptRow[];
+  files: Map<string, Uint8Array>;
   llmCalls: LlmCallRow[];
 };
 
@@ -44,7 +45,7 @@ function cosine(a: number[], b: number[]): number {
 }
 
 export function emptyData(): MemoryData {
-  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], llmCalls: [] };
+  return { children: [], mastery: [], books: [], curricula: [], lessons: [], replanEvents: [], chunks: [], attempts: [], files: new Map(), llmCalls: [] };
 }
 
 const copy = <T>(value: T): T => structuredClone(value);
@@ -91,9 +92,62 @@ export class MemoryStore implements Store {
     return copy(this.data.mastery.filter((m) => m.childId === childId));
   }
 
+  async createBook(input: { title: string; storagePath: string }) {
+    const row: BookRow & { createdAt: string } = {
+      id: uuid(),
+      title: input.title,
+      storagePath: input.storagePath,
+      status: "processing",
+      sections: [],
+      createdAt: now(),
+    };
+    this.data.books.push(row);
+    return copy(strip(row));
+  }
+
+  async listBooks() {
+    return [...this.data.books]
+      .sort((a, b) => ((b as { createdAt?: string }).createdAt ?? "").localeCompare((a as { createdAt?: string }).createdAt ?? ""))
+      .map((b) => copy(strip({ createdAt: "", ...b })));
+  }
+
+  async completeBook(
+    id: string,
+    sections: unknown,
+    chunks: { chunkIndex: number; content: string; sectionIndex: number; embedding: number[] }[],
+  ) {
+    const book = this.data.books.find((b) => b.id === id);
+    if (!book) throw new Error("book not found");
+    const seen = new Set<number>();
+    for (const c of chunks) {
+      if (seen.has(c.chunkIndex)) throw new Error("unique violation: book_chunk");
+      seen.add(c.chunkIndex);
+    }
+    this.data.chunks.push(...chunks.map((c) => ({ ...copy(c), bookId: id })));
+    book.sections = copy(sections);
+    book.status = "ready";
+  }
+
+  async failBook(id: string) {
+    const book = this.data.books.find((b) => b.id === id);
+    if (book) book.status = "failed";
+    this.data.chunks = this.data.chunks.filter((c) => c.bookId !== id);
+  }
+
+  async uploadFile(path: string, bytes: Uint8Array) {
+    if (this.data.files.has(path)) throw new Error("file exists");
+    this.data.files.set(path, new Uint8Array(bytes));
+  }
+
+  async downloadFile(path: string) {
+    const bytes = this.data.files.get(path);
+    if (!bytes) throw new Error("file not found");
+    return new Uint8Array(bytes);
+  }
+
   async getBook(id: string) {
     const row = this.data.books.find((b) => b.id === id);
-    return row ? copy(row) : null;
+    return row ? copy(strip({ createdAt: "", ...row })) : null;
   }
 
   newLessonRow(curriculumId: string, position: number, l: NewLesson): LessonRow {
